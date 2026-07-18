@@ -1,0 +1,34 @@
+{
+  "project_name": "Example Flight Search",
+  "origin": "BIO",
+  "origin_city": "Bilbao",
+  "destination": "BOG",
+  "destination_city": "Bogotá",
+  "outbound_target_date": "2026-12-04",
+  "return_target_date": "2027-01-08",
+  "date_flex_days": 3,
+  "passengers": 1,
+  "cabin": "economy",
+  "baggage": "personal item + carry-on",
+  "currency": "EUR",
+  "nightly_search_time": "22:00 Europe/Madrid",
+  "sources": [
+    "Google Flights",
+    "Avianca",
+    "Iberia",
+    "KLM",
+    "Air France"
+  ],
+  "cheap_threshold_percent_below_median": 15,
+  "possible_deal_threshold_percent_below_median": 10,
+  "outbound_search_window": {
+    "from": "2026-12-01",
+    "to": "2026-12-07",
+    "note": "Search around target date, not just exact date"
+  },
+  "return_search_window": {
+    "from": "2027-01-05",
+    "to": "2027-01-11",
+    "note": "Search around target date, not just exact date"
+  }
+}

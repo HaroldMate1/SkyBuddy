@@ -6,6 +6,7 @@ import argparse
 import csv
 import json
 import math
+import re
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -25,6 +26,7 @@ FIELDS = [
     "checked_return_date",
     "source",
     "url",
+    "checked_url",
     "notes",
 ]
 AIRLINE_FIELDS = [
@@ -56,6 +58,17 @@ def optional_price(value: str | float | None) -> float | None:
     if value is None or (isinstance(value, str) and value.strip().lower() in {"", "na", "n/a", "unavailable", "none"}):
         return None
     return positive_price(value)
+
+
+def route_key(origin: str, destination: str) -> str:
+    normalized = f"{origin.upper()}-{destination.upper()}"
+    if not re.fullmatch(r"[A-Z0-9]{3,5}-[A-Z0-9]{3,5}", normalized):
+        raise SystemExit("origin and destination must be 3-5 character IATA-style codes")
+    return normalized
+
+
+def route_root(root: Path, origin: str, destination: str) -> Path:
+    return root / "routes" / route_key(origin, destination)
 
 
 def paths(root: Path) -> tuple[Path, Path, Path]:
@@ -167,7 +180,7 @@ def summary(rows: list[dict[str, Any]]) -> dict[str, Any]:
 
 
 def command_record_airline(args: argparse.Namespace) -> dict[str, Any]:
-    root = Path(args.root)
+    root = route_root(Path(args.root), args.origin, args.destination)
     history_path = airline_history_path(root)
     parse_iso(args.observed_at)
     rows = load_airline_rows(history_path)
@@ -205,7 +218,7 @@ def command_record_airline(args: argparse.Namespace) -> dict[str, Any]:
 
 
 def command_record(args: argparse.Namespace) -> dict[str, Any]:
-    root = Path(args.root)
+    root = route_root(Path(args.root), args.origin, args.destination)
     history_path, state_path, graph_path = paths(root)
     parse_iso(args.observed_at)
     rows = load_rows(history_path)
@@ -234,6 +247,7 @@ def command_record(args: argparse.Namespace) -> dict[str, Any]:
         "checked_return_date": args.checked_return or args.return_date,
         "source": args.source,
         "url": args.url,
+        "checked_url": args.checked_url or args.url,
         "notes": args.notes,
     }
     rows.append(row)
@@ -250,7 +264,7 @@ def command_record(args: argparse.Namespace) -> dict[str, Any]:
 
 
 def command_status(args: argparse.Namespace) -> dict[str, Any]:
-    root = Path(args.root)
+    root = route_root(Path(args.root), args.origin, args.destination)
     history_path, _, graph_path = paths(root)
     rows = load_rows(history_path)
     airline_rows = load_airline_rows(airline_history_path(root))
@@ -267,7 +281,8 @@ def command_status(args: argparse.Namespace) -> dict[str, Any]:
 
 
 def command_should_alert(args: argparse.Namespace) -> dict[str, Any]:
-    history_path, state_path, _ = paths(Path(args.root))
+    root = route_root(Path(args.root), args.origin, args.destination)
+    history_path, state_path, _ = paths(root)
     rows = load_rows(history_path)
     if not rows:
         return {"alert_required": False, "reason": "no observations"}
@@ -290,11 +305,14 @@ def command_should_alert(args: argparse.Namespace) -> dict[str, Any]:
 
 
 def command_mark_sent(args: argparse.Namespace) -> dict[str, Any]:
-    history_path, state_path, _ = paths(Path(args.root))
+    root = route_root(Path(args.root), args.origin, args.destination)
+    history_path, state_path, _ = paths(root)
     rows = load_rows(history_path)
     if not rows:
         raise SystemExit("cannot mark alert sent without an observation")
     latest = rows[-1]
+    if latest["checked_bag_eur"] is None:
+        raise SystemExit("cannot mark alert sent: checked-bag fare unavailable")
     state = {
         "alert_active": True,
         "last_alert_price_eur": float(latest["checked_bag_eur"]),
@@ -308,6 +326,8 @@ def command_mark_sent(args: argparse.Namespace) -> dict[str, Any]:
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--root", default=str(DEFAULT_ROOT))
+    parser.add_argument("--origin", default="BIO")
+    parser.add_argument("--destination", default="BOG")
     sub = parser.add_subparsers(dest="command", required=True)
 
     airline = sub.add_parser("record-airline")
@@ -324,8 +344,6 @@ def build_parser() -> argparse.ArgumentParser:
 
     record = sub.add_parser("record")
     record.add_argument("--observed-at", required=True)
-    record.add_argument("--origin", default="BIO")
-    record.add_argument("--destination", default="BOG")
     record.add_argument("--no-bag", type=positive_price, required=True)
     record.add_argument("--checked-bag", default="unavailable")
     record.add_argument("--airline", required=True)
@@ -334,6 +352,7 @@ def build_parser() -> argparse.ArgumentParser:
     record.add_argument("--checked-return")
     record.add_argument("--source", required=True)
     record.add_argument("--url", required=True)
+    record.add_argument("--checked-url")
     record.add_argument("--outbound", default="2026-12-04")
     record.add_argument("--return-date", default="2027-01-08")
     record.add_argument("--notes", default="")

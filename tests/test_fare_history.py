@@ -14,13 +14,32 @@ PYTHON = sys.executable
 
 
 class FareHistoryTests(unittest.TestCase):
-    def run_cli(self, root: Path, *args: str) -> dict:
+    def run_cli(
+        self,
+        root: Path,
+        *args: str,
+        origin: str = "BIO",
+        destination: str = "BOG",
+        check: bool = True,
+    ) -> dict:
         result = subprocess.run(
-            [PYTHON, str(SCRIPT), "--root", str(root), *args],
-            check=True,
+            [
+                PYTHON,
+                str(SCRIPT),
+                "--root",
+                str(root),
+                "--origin",
+                origin,
+                "--destination",
+                destination,
+                *args,
+            ],
+            check=check,
             capture_output=True,
             text=True,
         )
+        if not check:
+            return {"returncode": result.returncode, "stderr": result.stderr}
         return json.loads(result.stdout)
 
     def test_record_summary_graph_and_alert_deduplication(self) -> None:
@@ -38,9 +57,11 @@ class FareHistoryTests(unittest.TestCase):
                 "--checked-return", "2027-01-09",
                 "--source", "Test",
                 "--url", "https://example.com/one",
+                "--checked-url", "https://example.com/checked-one",
             )
             self.assertEqual(first["latest"]["checked_airline"], "Different Bag Air")
             self.assertEqual(first["latest"]["checked_outbound_date"], "2026-12-03")
+            self.assertEqual(first["latest"]["checked_url"], "https://example.com/checked-one")
             self.assertEqual(first["observations"], 1)
             self.assertTrue(Path(first["graph_path"]).exists())
             with Image.open(first["graph_path"]) as dashboard:
@@ -107,7 +128,7 @@ class FareHistoryTests(unittest.TestCase):
             self.assertEqual(unavailable["airline_observations"], 2)
             self.assertIsNone(unavailable["latest_airlines"]["Iberia"]["no_checked_bag_eur"])
             self.assertEqual(unavailable["latest_airlines"]["Iberia"]["status"], "not_verified")
-            history = root / "data" / "airline_history.csv"
+            history = root / "routes" / "BIO-BOG" / "data" / "airline_history.csv"
             self.assertTrue(history.exists())
             status = self.run_cli(root, "status")
             self.assertEqual(set(status["latest_airlines"]), {"Air Europa", "Iberia"})
@@ -116,7 +137,7 @@ class FareHistoryTests(unittest.TestCase):
     def test_rejects_nonpositive_price(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             result = subprocess.run(
-                [PYTHON, str(SCRIPT), "--root", tmp, "record", "--observed-at", "2026-07-18T07:00:00+02:00", "--no-bag", "0", "--checked-bag", "1000", "--airline", "X", "--source", "Y", "--url", "https://example.com"],
+                [PYTHON, str(SCRIPT), "--root", tmp, "--origin", "BIO", "--destination", "BOG", "record", "--observed-at", "2026-07-18T07:00:00+02:00", "--no-bag", "0", "--checked-bag", "1000", "--airline", "X", "--source", "Y", "--url", "https://example.com"],
                 capture_output=True,
                 text=True,
             )
@@ -139,6 +160,47 @@ class FareHistoryTests(unittest.TestCase):
             alert = self.run_cli(root, "should-alert")
             self.assertFalse(alert["alert_required"])
             self.assertEqual(alert["reason"], "checked-bag fare unavailable")
+
+            mark = self.run_cli(
+                root,
+                "mark-alert-sent",
+                "--sent-at",
+                "2026-07-18T07:05:00+02:00",
+                check=False,
+            )
+            self.assertNotEqual(mark["returncode"], 0)
+            self.assertIn("checked-bag fare unavailable", mark["stderr"])
+
+    def test_routes_have_independent_history_dashboard_and_alert_state(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            common = (
+                "record",
+                "--observed-at", "2026-07-18T07:00:00+02:00",
+                "--no-bag", "950",
+                "--checked-bag", "1000",
+                "--airline", "Example Air",
+                "--source", "Test",
+                "--url", "https://example.com",
+            )
+            bio = self.run_cli(root, *common, origin="BIO", destination="BOG")
+            mad = self.run_cli(root, *common, origin="MAD", destination="JFK")
+
+            self.assertNotEqual(bio["history_path"], mad["history_path"])
+            self.assertEqual(self.run_cli(root, "status", origin="BIO", destination="BOG")["observations"], 1)
+            self.assertEqual(self.run_cli(root, "status", origin="MAD", destination="JFK")["observations"], 1)
+            self.assertTrue((root / "routes" / "BIO-BOG" / "reports" / "fare_history.png").exists())
+            self.assertTrue((root / "routes" / "MAD-JFK" / "reports" / "fare_history.png").exists())
+
+            self.run_cli(
+                root,
+                "mark-alert-sent",
+                "--sent-at", "2026-07-18T07:05:00+02:00",
+                origin="BIO",
+                destination="BOG",
+            )
+            self.assertFalse(self.run_cli(root, "should-alert", origin="BIO", destination="BOG")["alert_required"])
+            self.assertTrue(self.run_cli(root, "should-alert", origin="MAD", destination="JFK")["alert_required"])
 
 
 if __name__ == "__main__":

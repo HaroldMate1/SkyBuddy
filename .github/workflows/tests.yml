@@ -36,7 +36,8 @@ jobs:
 
     - name: Test imports
       run: |
-        python -c "from scripts.agent_integration import create_agent; print('✓ Imports OK')"
-        python -c "from scripts.mcp_server import SkyBuddyMCPServer; print('✓ MCP Server OK')"
-        python -c "from scripts.hermes_adapter import create_hermes_adapter; print('✓ Hermes Adapter OK')"
-        python -c "from scripts.openclaw_adapter import create_openclaw_adapter; print('✓ OpenClaw Adapter OK')"
+        cd scripts
+        python -c "from agent_integration import create_agent; print('Test imports OK')"
+        python -c "from mcp_server import SkyBuddyMCPServer; print('MCP Server OK')"
+        python -c "from hermes_adapter import create_hermes_adapter; print('Hermes Adapter OK')"
+        python -c "from openclaw_adapter import create_openclaw_adapter; print('OpenClaw Adapter OK')"

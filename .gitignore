@@ -28,6 +28,8 @@ venv/
 ENV/
 env/
 .venv
+.fli-venv/
+.monitor-venv/
 
 # IDE
 .vscode/
@@ -49,6 +51,11 @@ config/passengers.json
 config/cards.json
 data/alerts.json
 data/price_observations.csv
+data/google_flights_latest.json
+data/fare_history.csv
+data/airline_history.csv
+data/alert_state.json
+reports/
 
 # Logs
 *.log

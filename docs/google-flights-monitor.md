@@ -53,30 +53,38 @@ This records:
 - The overall cabin-only winner
 - The separate checked-bag winner
 - Per-carrier daily history
-- Alert state and a PNG dashboard
+- An atomically promoted route-specific PNG dashboard
 
-Generated files remain private and are ignored by Git:
+Alert state is created or updated only by alert operations (`mark-alert-sent`) or when an active alert resets above the threshold; applying a normal first sweep does not create it.
+
+The input JSON remains at the monitor root. Histories, alert state and dashboards are isolated per route:
 
 ```text
 data/google_flights_latest.json
-data/fare_history.csv
-data/airline_history.csv
-data/alert_state.json
-reports/fare_history.png
+routes/BIO-BOG/data/fare_history.csv
+routes/BIO-BOG/data/airline_history.csv
+routes/BIO-BOG/data/alert_state.json
+routes/BIO-BOG/reports/fare_history.png
 ```
+
+The applier validates and renders the complete update in a staging tree before replacing the live route directory. A missing cabin winner, malformed carrier result or rendering failure therefore leaves prior route state unchanged.
+
+### Upgrading a pre-route workspace
+
+Before this route-scoped layout, runtime files lived directly under `data/` and `reports/`. Move those legacy history/state files into `routes/ORIGIN-DESTINATION/data/` and the dashboard into `routes/ORIGIN-DESTINATION/reports/` before the first apply. Keep `data/google_flights_latest.json` at the monitor root. The next successful apply rewrites legacy history rows with the current schema while preserving their observations.
 
 ## Alert checks
 
 An alert is eligible only when a checked-bag fare is available and at or below the threshold.
 
 ```bash
-.monitor-venv/bin/python scripts/fare_history.py --root /path/to/private-monitor should-alert --threshold 1100 --improvement 25
+.monitor-venv/bin/python scripts/fare_history.py --root /path/to/private-monitor --origin BIO --destination BOG should-alert --threshold 1100 --improvement 25
 ```
 
 After delivering an alert, mark it as sent to prevent duplicate notifications:
 
 ```bash
-.monitor-venv/bin/python scripts/fare_history.py --root /path/to/private-monitor mark-alert-sent --sent-at 2026-07-18T15:00:00+00:00
+.monitor-venv/bin/python scripts/fare_history.py --root /path/to/private-monitor --origin BIO --destination BOG mark-alert-sent --sent-at 2026-07-18T15:00:00+00:00
 ```
 
 ## Automation guidance

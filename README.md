@@ -9,6 +9,7 @@ Production-grade flight price tracking with real-time search, smart monitoring, 
 - **Intelligent Price Monitoring** — Track unlimited routes simultaneously
 - **Smart Alerts** — Notifications when prices drop below targets
 - **Historical Analysis** — Price trends and statistical insights
+- **Flexible Google Flights Sweeps** — Every date pair, carrier combination, and baggage mode
 - **Best Fares Highlighted** — Automatic deal detection
 
 ### Advanced Features
@@ -92,7 +93,19 @@ Tracks multiple routes with:
 - Smart alert triggers
 - Target price notifications
 
-#### 4. Use With Your Agent
+#### 4. Sweep Flexible Google Flights Dates
+
+Install the optional monitor dependencies, run every date pair in both baggage modes, then apply the complete result:
+
+```bash
+pip install -r requirements-monitor.txt
+python scripts/google_flights_monitor.py --root /path/to/private-monitor --origin BIO --destination BOG --outbound-start 2026-12-02 --outbound-end 2026-12-06 --return-start 2027-01-06 --return-end 2027-01-10
+python scripts/apply_google_flights_results.py --root /path/to/private-monitor
+```
+
+This includes every pure or mixed carrier combination Google returns; it does not rely on a fixed airline list. See [Flexible Google Flights monitoring](docs/google-flights-monitor.md) for setup, alerting and data-source caveats.
+
+#### 5. Use With Your Agent
 
 **For Hermes:**
 ```python
@@ -123,6 +136,9 @@ Then use via Claude's tools.
 
 - **`flight_scraper.py`** — Generate booking URLs (7 sources)
 - **`flight_monitor.py`** — Track price changes across routes
+- **`google_flights_monitor.py`** — Flexible-date Google Flights collection across baggage modes
+- **`apply_google_flights_results.py`** — Persist every returned carrier and both winners
+- **`fare_history.py` / `dashboard.py`** — Alert-safe history and generated fare dashboard
 - **`duffel_client.py`** — Real-time Duffel API integration
 - **`preferences.py`** — User preferences & watched routes
 - **`alerts.py`** — Price alert management

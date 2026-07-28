@@ -20,6 +20,29 @@ def short_date(value: str) -> str:
     return datetime.fromisoformat(value).strftime("%d %b %Y")
 
 
+def continuous_fare_series(quotes: list[dict[str, Any]]) -> tuple[list[datetime], list[float]]:
+    """Return genuine daily fares without inserting gaps for unavailable days."""
+    daily_quotes: dict[Any, dict[str, Any]] = {}
+    for quote in quotes:
+        stamp = parse_iso(str(quote["observed_at"]))
+        day = stamp.date()
+        previous_quote = daily_quotes.get(day)
+        if previous_quote is None or stamp > parse_iso(str(previous_quote["observed_at"])):
+            daily_quotes[day] = quote
+
+    priced_quotes = [
+        daily_quotes[day]
+        for day in sorted(daily_quotes)
+        if daily_quotes[day].get("no_checked_bag_eur") is not None
+    ]
+    dates = [
+        parse_iso(str(quote["observed_at"])).replace(hour=12, minute=0, second=0, microsecond=0)
+        for quote in priced_quotes
+    ]
+    fares = [float(quote["no_checked_bag_eur"]) for quote in priced_quotes]
+    return dates, fares
+
+
 def render_dashboard(
     rows: list[dict[str, Any]],
     graph_path: Path,
@@ -263,26 +286,8 @@ def render_dashboard(
         carrier_quotes = [quote for quote in airline_rows if str(quote["airline"]) == airline]
         if not carrier_quotes:
             continue
-        # The report is daily: keep only the latest quote per calendar day.
-        daily_quotes: dict[Any, dict[str, Any]] = {}
-        for quote in carrier_quotes:
-            stamp = parse_iso(str(quote["observed_at"]))
-            day = stamp.date()
-            previous_quote = daily_quotes.get(day)
-            if previous_quote is None or stamp > parse_iso(str(previous_quote["observed_at"])):
-                daily_quotes[day] = quote
-        quotes = [daily_quotes[day] for day in sorted(daily_quotes)]
-        carrier_dates = [
-            parse_iso(str(quote["observed_at"])).replace(hour=12, minute=0, second=0, microsecond=0)
-            for quote in quotes
-        ]
-        carrier_values = [
-            float(quote["no_checked_bag_eur"])
-            if quote.get("no_checked_bag_eur") is not None
-            else math.nan
-            for quote in quotes
-        ]
-        if not any(math.isfinite(value) for value in carrier_values):
+        carrier_dates, carrier_values = continuous_fare_series(carrier_quotes)
+        if not carrier_values:
             continue
         chart.plot(
             carrier_dates,

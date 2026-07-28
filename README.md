@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="assets/skybuddy-logo.jpg" alt="SkyBuddy — Your friendly travel companion" width="280">
+</p>
+
 # SkyBuddy — AI-Powered Flight Tracking for Everyone
 
 Production-grade flight price tracking with real-time search, smart monitoring, price alerts, and multi-agent integration. Works with any agent: Hermes, OpenClaw, Claude, or your own.

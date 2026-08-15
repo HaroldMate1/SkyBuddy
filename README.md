@@ -15,6 +15,7 @@ Production-grade flight price tracking with real-time search, smart monitoring, 
 - **Historical Analysis** — Price trends and statistical insights
 - **Flexible Google Flights Sweeps** — Every date pair, carrier combination, and baggage mode
 - **Best Fares Highlighted** — Automatic deal detection
+- **Long-Haul Seat Advisory** — FlightAware aircraft checks plus SeatMaps cabin-map links for flights over 8 hours
 
 ### Advanced Features
 - **AI Recommendations** — Flights scored based on your preferences
@@ -134,6 +135,16 @@ python scripts/mcp_server.py
 
 Then use via Claude's tools.
 
+#### 6. Check Long-Haul Seats
+
+For flights over 8 hours, confirm the operating aircraft on FlightAware, then inspect the airline-specific cabin map on SeatMaps:
+
+```bash
+python scripts/seat_advisor.py --airline Iberia --flight-number "IB 6131" --aircraft "Airbus A350-900" --duration-minutes 610 --cabin economy
+```
+
+The command returns structured JSON with FlightAware and SeatMaps links, configuration warnings and practical seat-selection checks. See [Long-haul seat advisory](docs/seat-advisory.md) for caveats.
+
 ## Architecture
 
 ### Core Modules
@@ -143,6 +154,7 @@ Then use via Claude's tools.
 - **`google_flights_monitor.py`** — Flexible-date Google Flights collection across baggage modes
 - **`apply_google_flights_results.py`** — Persist every returned carrier and both winners
 - **`fare_history.py` / `dashboard.py`** — Alert-safe history and generated fare dashboard
+- **`seat_advisor.py`** — Long-haul FlightAware → SeatMaps seat advisory workflow
 - **`duffel_client.py`** — Real-time Duffel API integration
 - **`preferences.py`** — User preferences & watched routes
 - **`alerts.py`** — Price alert management

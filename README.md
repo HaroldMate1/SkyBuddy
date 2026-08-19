@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="assets/skybuddy-logo.jpg" alt="SkyBuddy" width="220">
+  <img src="web/logo.svg" alt="SkyBuddy" width="110">
 </p>
 
 <h1 align="center">SkyBuddy</h1>
@@ -12,13 +12,27 @@
 </p>
 
 <p align="center">
-  <img src="https://visitor-badge.laobi.icu/badge?page_id=HaroldMate1.SkyBuddy&title=repo%20visits&color=4ea1ff" alt="Repository visits">
-  <img src="https://img.shields.io/github/stars/HaroldMate1/SkyBuddy?style=flat&color=4ea1ff" alt="Stars">
-  <img src="https://img.shields.io/github/forks/HaroldMate1/SkyBuddy?style=flat&color=7c5cff" alt="Forks">
-  <img src="https://img.shields.io/github/last-commit/HaroldMate1/SkyBuddy?color=35e0a1" alt="Last commit">
-  <img src="https://github.com/HaroldMate1/SkyBuddy/actions/workflows/tests.yml/badge.svg" alt="Tests">
-  <img src="https://img.shields.io/badge/python-3.10%2B-blue" alt="Python 3.10+">
-  <img src="https://img.shields.io/badge/protocol-MCP-black" alt="MCP">
+  <a href="https://skybuddy-ochre.vercel.app"><strong>Live site →</strong></a> ·
+  <a href="#quick-start">Quick start</a> ·
+  <a href="#5-agent-booking-trigger">Agent booking</a> ·
+  <a href="#mcp-tool-reference">MCP tools</a>
+</p>
+
+<p align="center">
+  <a href="https://skybuddy-ochre.vercel.app"><img src="https://img.shields.io/badge/live-skybuddy.vercel.app-00f0ff?style=flat&logo=vercel&logoColor=white" alt="Live site"></a>
+  <img src="https://visitor-badge.laobi.icu/badge?page_id=HaroldMate1.SkyBuddy&title=repo%20visits&color=00f0ff" alt="Repository visits">
+  <a href="https://github.com/HaroldMate1/SkyBuddy/stargazers"><img src="https://img.shields.io/github/stars/HaroldMate1/SkyBuddy?style=flat&color=00f0ff" alt="Stars"></a>
+  <a href="https://github.com/HaroldMate1/SkyBuddy/network/members"><img src="https://img.shields.io/github/forks/HaroldMate1/SkyBuddy?style=flat&color=9b6bff" alt="Forks"></a>
+  <a href="https://github.com/HaroldMate1/SkyBuddy/commits/main"><img src="https://img.shields.io/github/last-commit/HaroldMate1/SkyBuddy?color=b4ff39" alt="Last commit"></a>
+  <a href="https://github.com/HaroldMate1/SkyBuddy/actions/workflows/tests.yml"><img src="https://github.com/HaroldMate1/SkyBuddy/actions/workflows/tests.yml/badge.svg" alt="Tests"></a>
+  <img src="https://img.shields.io/badge/python-3.10%2B-1668c8" alt="Python 3.10+">
+  <img src="https://img.shields.io/badge/protocol-MCP-ff007f" alt="MCP">
+</p>
+
+<p align="center">
+  <a href="https://skybuddy-ochre.vercel.app">
+    <img src="assets/screenshots/site-hero.jpg" alt="SkyBuddy — glassmorphic flight search dashboard on a deep blue gradient with drifting clouds" width="960">
+  </a>
 </p>
 
 ---
@@ -77,16 +91,10 @@ so Claude, Hermes, OpenClaw or your own agent all get the same 30 tools.
 
 ## The website
 
-A ready-to-deploy landing page lives in [`web/`](web) and ships with a `vercel.json`, so the
-repository deploys to Vercel as-is. Deep royal-blue to indigo gradient, glassmorphic panels, neon
+The landing page is live at **[skybuddy-ochre.vercel.app](https://skybuddy-ochre.vercel.app)**.
+It lives in [`web/`](web) and ships with a `vercel.json`, so the repository deploys to Vercel as-is. Deep royal-blue to indigo gradient, glassmorphic panels, neon
 cyan and magenta accents, drifting clouds and a paper plane looping across the sky.
 See [Deploying the website to Vercel](#deploying-the-website-to-vercel).
-
-<p align="center">
-  <img src="assets/screenshots/site-hero.jpg" alt="SkyBuddy landing page: glassmorphic search dashboard over a deep blue gradient, with a traveller switcher" width="900">
-</p>
-
-<p align="center"><em>Hero — the search dashboard, with the traveller switcher on top.</em></p>
 
 <p align="center">
   <img src="assets/screenshots/site-dashboard.jpg" alt="Flight result cards with 26-week price trend graphs and low, median and high prices" width="900">

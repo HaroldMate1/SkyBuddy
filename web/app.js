@@ -1,9 +1,10 @@
 /* ============================================================
-   SkyBuddy landing page
-   - traveller (multi-user) workspaces, stored per browser
+   SkyBuddy landing page + dashboard shell
+   - airport/city autocomplete on the search fields
    - scanning search → skeleton shimmer → glass flight cards
    - price-trend sparklines with glowing hover tooltips
-   - price-drop success animation
+   - demo mode (signed out) with browser-local travellers
+   - hooks so live.js can take over once someone signs in
    ============================================================ */
 (function () {
   "use strict";
@@ -11,25 +12,210 @@
   var STORE = "skybuddy.users.v1";
   var REDUCED = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
-  /* ---------------- sample fare data (demo only) ---------------- */
+  /* Overridable behaviour. live.js replaces these once a session exists. */
+  var hooks = { search: null, track: null, renderTracked: null };
+  var mode = "demo";
+
+  /* ---------------- helpers ---------------- */
+
+  function pad(value) { return value < 10 ? "0" + value : String(value); }
+
+  function money(value, currency) {
+    if (value === null || value === undefined || value === "") return "—";
+    var symbols = { EUR: "€", USD: "$", GBP: "£" };
+    var symbol = symbols[currency || "EUR"] || (currency ? currency + " " : "€");
+    return symbol + Math.round(Number(value)).toLocaleString("en-GB");
+  }
+
+  function euro(value) { return money(value, "EUR"); }
+
+  function escapeHtml(value) {
+    return String(value === null || value === undefined ? "" : value).replace(
+      /[&<>"']/g,
+      function (character) {
+        return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[character];
+      }
+    );
+  }
+
+  function minutesToText(minutes) {
+    if (!minutes && minutes !== 0) return "";
+    return Math.floor(minutes / 60) + "h " + (minutes % 60) + "m";
+  }
+
+  function timeOf(iso) {
+    if (!iso) return "--:--";
+    var date = new Date(iso);
+    if (isNaN(date)) return String(iso).slice(11, 16) || "--:--";
+    return pad(date.getHours()) + ":" + pad(date.getMinutes());
+  }
+
+  /* ---------------- airport autocomplete ---------------- */
+
+  var airports = null;
+  var airportsPromise = null;
+
+  function loadAirports() {
+    if (airports) return Promise.resolve(airports);
+    if (!airportsPromise) {
+      airportsPromise = fetch("/data/airports.json")
+        .then(function (response) { return response.ok ? response.json() : []; })
+        .then(function (rows) {
+          airports = rows.map(function (row) {
+            return {
+              code: row.c,
+              name: row.n,
+              city: row.m,
+              country: row.k || row.y,
+              rank: row.r,
+              haystack: (row.c + " " + row.n + " " + row.m + " " + (row.k || "") + " " + row.y).toLowerCase()
+            };
+          });
+          return airports;
+        })
+        .catch(function () { airports = []; return airports; });
+    }
+    return airportsPromise;
+  }
+
+  /** Rank matches so an exact IATA code and the big hubs come first. */
+  function findAirports(query, limit) {
+    var needle = query.trim().toLowerCase();
+    if (!needle || !airports) return [];
+
+    var scored = [];
+    for (var i = 0; i < airports.length; i++) {
+      var airport = airports[i];
+      var score = -1;
+
+      if (airport.code.toLowerCase() === needle) score = 0;
+      else if (airport.city && airport.city.toLowerCase().indexOf(needle) === 0) score = 1;
+      else if (airport.name.toLowerCase().indexOf(needle) === 0) score = 2;
+      else if (airport.code.toLowerCase().indexOf(needle) === 0) score = 3;
+      else if (airport.haystack.indexOf(needle) !== -1) score = 4;
+
+      if (score >= 0) scored.push({ airport: airport, score: score * 10 + airport.rank });
+    }
+
+    scored.sort(function (a, b) { return a.score - b.score; });
+    return scored.slice(0, limit || 7).map(function (entry) { return entry.airport; });
+  }
+
+  function attachAutocomplete(input) {
+    var field = input.closest(".field");
+    if (!field) return;
+
+    field.classList.add("field--combo");
+    var list = document.createElement("div");
+    list.className = "combo";
+    list.setAttribute("role", "listbox");
+    field.appendChild(list);
+
+    var caption = document.createElement("span");
+    caption.className = "field__caption";
+    input.insertAdjacentElement("afterend", caption);
+
+    var active = -1;
+    var matches = [];
+
+    function describe(airport) {
+      var place = [airport.city, airport.country].filter(Boolean).join(", ");
+      return airport.name + (place ? " · " + place : "");
+    }
+
+    function close() {
+      list.classList.remove("is-open");
+      active = -1;
+    }
+
+    function choose(airport) {
+      input.value = airport.code;
+      input.dataset.iata = airport.code;
+      caption.textContent = describe(airport);
+      close();
+      input.dispatchEvent(new Event("change", { bubbles: true }));
+    }
+
+    function render() {
+      list.innerHTML = "";
+      if (!matches.length) return close();
+
+      matches.forEach(function (airport, index) {
+        var option = document.createElement("button");
+        option.type = "button";
+        option.className = "combo__item" + (index === active ? " is-active" : "");
+        option.setAttribute("role", "option");
+        option.innerHTML =
+          '<span class="combo__code">' + escapeHtml(airport.code) + "</span>" +
+          '<span class="combo__text"><strong>' + escapeHtml(airport.city || airport.name) + "</strong>" +
+          "<small>" + escapeHtml(describe(airport)) + "</small></span>";
+        option.addEventListener("mousedown", function (event) {
+          event.preventDefault();
+          choose(airport);
+        });
+        list.appendChild(option);
+      });
+      list.classList.add("is-open");
+    }
+
+    function update() {
+      loadAirports().then(function () {
+        matches = findAirports(input.value, 7);
+        active = matches.length ? 0 : -1;
+        render();
+      });
+    }
+
+    input.setAttribute("autocomplete", "off");
+    input.removeAttribute("maxlength");
+    input.addEventListener("focus", update);
+    input.addEventListener("input", function () {
+      delete input.dataset.iata;
+      caption.textContent = "";
+      update();
+    });
+    input.addEventListener("blur", function () { window.setTimeout(close, 120); });
+    input.addEventListener("keydown", function (event) {
+      if (!list.classList.contains("is-open")) return;
+      if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+        event.preventDefault();
+        active = (active + (event.key === "ArrowDown" ? 1 : -1) + matches.length) % matches.length;
+        render();
+      } else if (event.key === "Enter" && matches[active]) {
+        event.preventDefault();
+        choose(matches[active]);
+      } else if (event.key === "Escape") {
+        close();
+      }
+    });
+
+    // resolve whatever is already in the field (the BIO/BOG defaults)
+    loadAirports().then(function () {
+      var seeded = findAirports(input.value, 1)[0];
+      if (seeded && seeded.code.toLowerCase() === input.value.trim().toLowerCase()) {
+        input.dataset.iata = seeded.code;
+        caption.textContent = describe(seeded);
+      }
+    });
+  }
+
+  /* ---------------- demo fare data ---------------- */
 
   var AIRLINES = [
     { code: "IB", name: "Iberia", flight: "IB 6585", color: "#ff4d6d" },
     { code: "AV", name: "Avianca", flight: "AV 121", color: "#ff2e63" },
     { code: "KL", name: "KLM", flight: "KL 741", color: "#00b0ff" },
-    { code: "AF", name: "Air France", flight: "AF 428", color: "#4d9fff" },
-    { code: "LH", name: "Lufthansa", flight: "LH 512", color: "#ffb703" }
+    { code: "AF", name: "Air France", flight: "AF 428", color: "#4d9fff" }
   ];
 
-  var VERDICTS = [
-    { key: "buy_now", label: "Buy now", cls: "v-buy" },
-    { key: "good", label: "Good", cls: "v-good" },
-    { key: "fair", label: "Fair", cls: "v-wait" },
-    { key: "wait", label: "Wait", cls: "v-wait" },
-    { key: "high", label: "High", cls: "v-high" }
-  ];
+  var VERDICTS = {
+    buy_now: { label: "Buy now", cls: "v-buy" },
+    good: { label: "Good", cls: "v-good" },
+    fair: { label: "Fair", cls: "v-wait" },
+    wait: { label: "Wait", cls: "v-wait" },
+    high: { label: "High", cls: "v-high" }
+  };
 
-  /* deterministic pseudo-random so a route always renders the same way */
   function seeded(seed) {
     var value = 0;
     for (var i = 0; i < seed.length; i++) value = (value * 31 + seed.charCodeAt(i)) >>> 0;
@@ -39,15 +225,23 @@
     };
   }
 
-  function buildFlights(origin, destination, outbound) {
+  function verdictFor(price, history) {
+    if (!history || !history.length) return null;
+    var ordered = history.slice().sort(function (a, b) { return a - b; });
+    var at = function (fraction) { return ordered[Math.round(fraction * (ordered.length - 1))]; };
+    if (price <= at(0.1)) return "buy_now";
+    if (price <= at(0.25)) return "good";
+    if (price <= at(0.5)) return "fair";
+    if (price <= at(0.75)) return "wait";
+    return "high";
+  }
+
+  function buildDemoFlights(origin, destination, outbound) {
     var rand = seeded(origin + destination + outbound);
     var base = 560 + Math.floor(rand() * 260);
-
-    /* one flight per position in the price distribution, so the demo shows the
-       whole verdict scale instead of four identical "buy now" badges */
     var POSITION = [0.06, 0.2, 0.45, 0.82];
 
-    return AIRLINES.slice(0, 4).map(function (airline, index) {
+    return AIRLINES.map(function (airline, index) {
       var centre = base + index * 60;
       var history = [];
       var point = centre;
@@ -60,50 +254,34 @@
       var price = ranked[Math.round(POSITION[index] * (ranked.length - 1))];
       history[history.length - 1] = price;
 
-      var sorted = history.slice().sort(function (a, b) { return a - b; });
-      var median = sorted[Math.floor(sorted.length / 2)];
-      var p10 = sorted[Math.floor(sorted.length * 0.1)];
-      var p25 = sorted[Math.floor(sorted.length * 0.25)];
-      var p75 = sorted[Math.floor(sorted.length * 0.75)];
-
-      var verdict = VERDICTS[4];
-      if (price <= p10) verdict = VERDICTS[0];
-      else if (price <= p25) verdict = VERDICTS[1];
-      else if (price <= median) verdict = VERDICTS[2];
-      else if (price <= p75) verdict = VERDICTS[3];
-
       var depart = 7 + index * 3;
       var duration = 570 + Math.floor(rand() * 300);
-      var stops = index === 0 ? 0 : (rand() > 0.55 ? 1 : 2);
 
       return {
         id: airline.code + "-" + origin + destination + "-" + outbound,
-        airline: airline,
+        airline: airline.name,
+        airline_code: airline.code,
+        color: airline.color,
+        flight_number: airline.flight,
         origin: origin,
         destination: destination,
         outbound: outbound,
         price: price,
-        median: median,
-        low: sorted[0],
-        high: sorted[sorted.length - 1],
+        currency: "EUR",
         history: history,
-        verdict: verdict,
         departure: pad(depart) + ":" + (index % 2 ? "45" : "10"),
         arrival: pad((depart + Math.floor(duration / 60)) % 24) + ":" + (index % 2 ? "20" : "55"),
-        duration: Math.floor(duration / 60) + "h " + (duration % 60) + "m",
-        stops: stops
+        duration: minutesToText(duration),
+        stops: index === 0 ? 0 : (rand() > 0.55 ? 1 : 2)
       };
     });
   }
 
-  function pad(value) { return value < 10 ? "0" + value : String(value); }
-  function euro(value) { return "€" + Math.round(value).toLocaleString("en-GB"); }
+  /* ---------------- browser-local travellers (demo mode) ---------------- */
 
-  /* ---------------- traveller workspaces ---------------- */
+  var state = loadState();
 
-  var state = load();
-
-  function load() {
+  function loadState() {
     try {
       var raw = JSON.parse(localStorage.getItem(STORE) || "null");
       if (raw && raw.users && raw.users.length) return raw;
@@ -117,7 +295,7 @@
     };
   }
 
-  function save() {
+  function saveState() {
     try { localStorage.setItem(STORE, JSON.stringify(state)); } catch (error) { /* private mode */ }
   }
 
@@ -125,11 +303,13 @@
     return state.users.filter(function (user) { return user.id === state.active; })[0] || state.users[0];
   }
 
+  var usersRow = document.getElementById("users");
   var usersList = document.getElementById("users-list");
   var usersHint = document.getElementById("users-hint");
   var addButton = document.getElementById("user-add");
 
   function renderUsers() {
+    if (mode !== "demo") return;
     usersList.innerHTML = "";
     state.users.forEach(function (user) {
       var chip = document.createElement("button");
@@ -141,36 +321,29 @@
         '<span class="user-chip__n">' + user.tracked.length + "</span>";
       chip.addEventListener("click", function () {
         state.active = user.id;
-        save();
+        saveState();
         renderUsers();
         renderTracked();
       });
       usersList.appendChild(chip);
     });
-    usersHint.textContent = activeUser().name + "'s workspace — routes, alerts and bookings stay separate";
+    usersHint.textContent = activeUser().name + "'s preview — sign in to track routes for real";
   }
 
   addButton.addEventListener("click", function () {
     var name = (window.prompt("Traveller name") || "").trim();
     if (!name) return;
     var id = name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || ("user" + state.users.length);
-    if (state.users.some(function (user) { return user.id === id; })) {
-      state.active = id;
-    } else {
-      state.users.push({
-        id: id,
-        name: name,
-        initials: name.trim().charAt(0).toUpperCase(),
-        tracked: []
-      });
-      state.active = id;
+    if (!state.users.some(function (user) { return user.id === id; })) {
+      state.users.push({ id: id, name: name, initials: name.charAt(0).toUpperCase(), tracked: [] });
     }
-    save();
+    state.active = id;
+    saveState();
     renderUsers();
     renderTracked();
   });
 
-  /* ---------------- tracked flights ---------------- */
+  /* ---------------- tracked list (demo mode) ---------------- */
 
   var trackedBox = document.getElementById("tracked");
   var trackedList = document.getElementById("tracked-list");
@@ -178,6 +351,8 @@
   var trackedCount = document.getElementById("tracked-count");
 
   function renderTracked() {
+    if (hooks.renderTracked) return hooks.renderTracked();
+
     var user = activeUser();
     trackedTitle.textContent = user.name + "'s tracked flights";
     trackedCount.textContent = user.tracked.length + " watched";
@@ -192,7 +367,7 @@
         '<span class="track-row__meta">' + escapeHtml(item.airline) + " · " + escapeHtml(item.outbound) + "</span>" +
         '<span class="track-row__range">low <b>' + euro(item.low || item.price) + "</b> · median <b>" +
           euro(item.median || item.price) + "</b> · high <b>" + euro(item.high || item.price) + "</b></span>" +
-        '<span class="track-row__price display" data-price="' + item.price + '">' + euro(item.price) + "</span>" +
+        '<span class="track-row__price display">' + euro(item.price) + "</span>" +
         '<span class="price__verdict ' + item.cls + '">' + escapeHtml(item.label) + "</span>";
 
       var drop = document.createElement("button");
@@ -209,7 +384,7 @@
       remove.textContent = "✕";
       remove.addEventListener("click", function () {
         user.tracked = user.tracked.filter(function (entry) { return entry.id !== item.id; });
-        save();
+        saveState();
         renderUsers();
         renderTracked();
       });
@@ -221,13 +396,12 @@
 
   function simulateDrop(row, item) {
     var priceEl = row.querySelector(".track-row__price");
-    var newPrice = Math.round(item.price * 0.88);
-    item.price = newPrice;
+    item.price = Math.round(item.price * 0.88);
     item.cls = "v-buy";
     item.label = "Buy now";
-    save();
+    saveState();
 
-    priceEl.textContent = euro(newPrice);
+    priceEl.textContent = euro(item.price);
     priceEl.classList.add("is-drop");
 
     var badge = row.querySelector(".price__verdict");
@@ -249,42 +423,45 @@
 
   var tip = document.getElementById("tip");
 
-  function sparkline(flight) {
-    var width = 170, height = 54, points = flight.history;
-    var min = Math.min.apply(null, points), max = Math.max.apply(null, points);
+  function sparkline(points, options) {
+    var settings = options || {};
+    var width = 170;
+    var height = 54;
+    var min = Math.min.apply(null, points);
+    var max = Math.max.apply(null, points);
     var span = Math.max(max - min, 1);
-    var stepX = width / (points.length - 1);
+    var stepX = width / Math.max(points.length - 1, 1);
 
     var coords = points.map(function (value, index) {
       return {
         x: index * stepX,
         y: height - ((value - min) / span) * (height - 8) - 4,
         value: value,
-        week: points.length - index
+        label: settings.labels ? settings.labels[index] : (points.length - index) + " checks ago"
       };
     });
 
-    var line = coords.map(function (point, index) {
-      return (index ? "L" : "M") + point.x.toFixed(1) + " " + point.y.toFixed(1);
-    }).join(" ");
+    var line = coords
+      .map(function (point, index) { return (index ? "L" : "M") + point.x.toFixed(1) + " " + point.y.toFixed(1); })
+      .join(" ");
 
-    var svgNS = "http://www.w3.org/2000/svg";
-    var svg = document.createElementNS(svgNS, "svg");
+    var ns = "http://www.w3.org/2000/svg";
+    var svg = document.createElementNS(ns, "svg");
     svg.setAttribute("class", "spark");
     svg.setAttribute("viewBox", "0 0 " + width + " " + height);
     svg.setAttribute("preserveAspectRatio", "none");
 
-    var defs = document.createElementNS(svgNS, "defs");
+    var defs = document.createElementNS(ns, "defs");
     defs.innerHTML =
       '<linearGradient id="sparkFill" x1="0" y1="0" x2="0" y2="1">' +
       '<stop offset="0%" stop-color="#00f0ff" stop-opacity="0.32"/>' +
       '<stop offset="100%" stop-color="#00f0ff" stop-opacity="0"/></linearGradient>';
     svg.appendChild(defs);
 
-    var grid = document.createElementNS(svgNS, "g");
+    var grid = document.createElementNS(ns, "g");
     grid.setAttribute("class", "spark__grid");
     [0.25, 0.5, 0.75].forEach(function (fraction) {
-      var gridLine = document.createElementNS(svgNS, "line");
+      var gridLine = document.createElementNS(ns, "line");
       gridLine.setAttribute("x1", 0);
       gridLine.setAttribute("x2", width);
       gridLine.setAttribute("y1", height * fraction);
@@ -293,23 +470,23 @@
     });
     svg.appendChild(grid);
 
-    var area = document.createElementNS(svgNS, "path");
+    var area = document.createElementNS(ns, "path");
     area.setAttribute("class", "spark__area");
     area.setAttribute("d", line + " L" + width + " " + height + " L0 " + height + " Z");
     svg.appendChild(area);
 
-    var path = document.createElementNS(svgNS, "path");
+    var path = document.createElementNS(ns, "path");
     path.setAttribute("class", "spark__line");
     path.setAttribute("d", line);
     svg.appendChild(path);
 
     coords.forEach(function (point) {
-      var dot = document.createElementNS(svgNS, "circle");
-      dot.setAttribute("class", "spark__dot" + (point.value === flight.low ? " spark__dot--low" : ""));
+      var dot = document.createElementNS(ns, "circle");
+      dot.setAttribute("class", "spark__dot" + (point.value === min ? " spark__dot--low" : ""));
       dot.setAttribute("cx", point.x.toFixed(1));
       dot.setAttribute("cy", point.y.toFixed(1));
       dot.addEventListener("mouseenter", function (event) {
-        tip.innerHTML = euro(point.value) + "<small>" + point.week + " weeks ago</small>";
+        tip.innerHTML = money(point.value, settings.currency) + "<small>" + escapeHtml(point.label) + "</small>";
         tip.classList.add("is-on");
         moveTip(event);
       });
@@ -326,83 +503,112 @@
     tip.style.top = event.clientY + "px";
   }
 
-  /* ---------------- results ---------------- */
+  /* ---------------- flight cards ---------------- */
 
   var results = document.getElementById("results");
 
   function renderFlights(flights) {
     results.innerHTML = "";
+    if (!flights || !flights.length) {
+      return showMessage("No fares came back for that route and date.");
+    }
+
     flights.forEach(function (flight, index) {
+      var history = flight.history || null;
+      var verdict = flight.verdict || verdictFor(flight.price, history);
+      var badge = VERDICTS[verdict];
+      var ordered = history ? history.slice().sort(function (a, b) { return a - b; }) : null;
+
       var card = document.createElement("article");
       card.className = "flight glass";
       card.style.animationDelay = (index * 0.09) + "s";
-
       card.innerHTML =
         '<div class="flight__airline">' +
-          '<span class="flight__logo" style="background:' + flight.airline.color + '; color:#08131f">' +
-            flight.airline.code +
+          '<span class="flight__logo" style="background:' + (flight.color || "#4d9fff") + '">' +
+            escapeHtml(flight.airline_code || (flight.airline || "??").slice(0, 2).toUpperCase()) +
           "</span>" +
-          "<span><span class='flight__carrier'>" + escapeHtml(flight.airline.name) + "</span>" +
-          "<span class='flight__fno'>" + escapeHtml(flight.airline.flight) + "</span></span>" +
+          "<span><span class='flight__carrier'>" + escapeHtml(flight.airline) + "</span>" +
+          "<span class='flight__fno'>" + escapeHtml(flight.flight_number || "") + "</span></span>" +
         "</div>" +
         '<div class="flight__route">' +
-          '<div class="leg"><div class="leg__time">' + flight.departure + '</div><div class="leg__code">' + escapeHtml(flight.origin) + "</div></div>" +
+          '<div class="leg"><div class="leg__time">' + escapeHtml(flight.departure) + "</div>" +
+          '<div class="leg__code">' + escapeHtml(flight.origin) + "</div></div>" +
           '<div class="path"><div class="path__line"></div><div class="path__meta">' +
-            flight.duration + " · " + (flight.stops ? flight.stops + " stop" + (flight.stops > 1 ? "s" : "") : "non-stop") +
+            escapeHtml(flight.duration || "") +
+            (flight.stops === undefined || flight.stops === null
+              ? ""
+              : " · " + (flight.stops ? flight.stops + " stop" + (flight.stops > 1 ? "s" : "") : "non-stop")) +
           "</div></div>" +
-          '<div class="leg"><div class="leg__time">' + flight.arrival + '</div><div class="leg__code">' + escapeHtml(flight.destination) + "</div></div>" +
+          '<div class="leg"><div class="leg__time">' + escapeHtml(flight.arrival) + "</div>" +
+          '<div class="leg__code">' + escapeHtml(flight.destination) + "</div></div>" +
         "</div>" +
-        '<div class="flight__trend"><span class="trend__label">26-week history</span></div>' +
+        '<div class="flight__trend"><span class="trend__label">' +
+          (history ? "price history" : "no history yet") +
+        "</span></div>" +
         '<div class="flight__price">' +
-          '<span class="price">' + euro(flight.price) + "</span>" +
-          '<span class="price__verdict ' + flight.verdict.cls + '">' + flight.verdict.label + "</span>" +
+          '<span class="price">' + money(flight.price, flight.currency) + "</span>" +
+          (badge ? '<span class="price__verdict ' + badge.cls + '">' + badge.label + "</span>" : "") +
         "</div>";
 
       var trend = card.querySelector(".flight__trend");
-      trend.appendChild(sparkline(flight));
-
-      var stats = document.createElement("div");
-      stats.className = "trend__stats";
-      stats.innerHTML =
-        '<span class="ts ts--low">low <b>' + euro(flight.low) + "</b></span>" +
-        '<span class="ts">med <b>' + euro(flight.median) + "</b></span>" +
-        '<span class="ts ts--high">high <b>' + euro(flight.high) + "</b></span>";
-      trend.appendChild(stats);
+      if (history) {
+        trend.appendChild(sparkline(history, { currency: flight.currency }));
+        var stats = document.createElement("div");
+        stats.className = "trend__stats";
+        stats.innerHTML =
+          '<span class="ts ts--low">low <b>' + money(ordered[0], flight.currency) + "</b></span>" +
+          '<span class="ts">med <b>' + money(ordered[Math.floor(ordered.length / 2)], flight.currency) + "</b></span>" +
+          '<span class="ts ts--high">high <b>' + money(ordered[ordered.length - 1], flight.currency) + "</b></span>";
+        trend.appendChild(stats);
+      } else {
+        var note = document.createElement("p");
+        note.className = "trend__empty";
+        note.textContent = "Track it and SkyBuddy starts recording the price history.";
+        trend.appendChild(note);
+      }
 
       var track = document.createElement("button");
       track.type = "button";
       track.className = "btn btn--sm btn--primary";
       track.textContent = "Track price";
       track.addEventListener("click", function () {
-        var user = activeUser();
-        if (user.tracked.some(function (entry) { return entry.id === flight.id; })) {
-          track.textContent = "Already tracked";
-          return;
-        }
-        user.tracked.push({
-          id: flight.id,
-          origin: flight.origin,
-          destination: flight.destination,
-          outbound: flight.outbound,
-          airline: flight.airline.name,
-          price: flight.price,
-          low: flight.low,
-          median: flight.median,
-          high: flight.high,
-          cls: flight.verdict.cls,
-          label: flight.verdict.label
-        });
-        save();
-        renderUsers();
-        renderTracked();
-
-        track.innerHTML = '<span class="check">✓</span> Tracking';
-        window.setTimeout(function () { track.textContent = "Tracked"; }, 1200);
+        if (hooks.track) return hooks.track(flight, track);
+        trackInDemo(flight, track, history);
       });
       card.querySelector(".flight__price").appendChild(track);
 
       results.appendChild(card);
     });
+  }
+
+  function trackInDemo(flight, button, history) {
+    var user = activeUser();
+    if (user.tracked.some(function (entry) { return entry.id === flight.id; })) {
+      button.textContent = "Already tracked";
+      return;
+    }
+    var ordered = (history || [flight.price]).slice().sort(function (a, b) { return a - b; });
+    var verdict = VERDICTS[flight.verdict || verdictFor(flight.price, history) || "fair"];
+
+    user.tracked.push({
+      id: flight.id,
+      origin: flight.origin,
+      destination: flight.destination,
+      outbound: flight.outbound,
+      airline: flight.airline,
+      price: flight.price,
+      low: ordered[0],
+      median: ordered[Math.floor(ordered.length / 2)],
+      high: ordered[ordered.length - 1],
+      cls: verdict.cls,
+      label: verdict.label
+    });
+    saveState();
+    renderUsers();
+    renderTracked();
+
+    button.innerHTML = '<span class="check">✓</span> Tracking';
+    window.setTimeout(function () { button.textContent = "Tracked"; }, 1200);
   }
 
   function renderSkeletons(count) {
@@ -414,24 +620,52 @@
     }
   }
 
+  function showMessage(text, kind) {
+    results.innerHTML = "";
+    var box = document.createElement("p");
+    box.className = "results__msg glass" + (kind === "error" ? " is-error" : "");
+    box.textContent = text;
+    results.appendChild(box);
+  }
+
   /* ---------------- search ---------------- */
 
   var dash = document.getElementById("dash");
   var form = document.getElementById("search-form");
 
-  function runSearch() {
-    var origin = (document.getElementById("f-origin").value || "BIO").toUpperCase().slice(0, 3);
-    var destination = (document.getElementById("f-dest").value || "BOG").toUpperCase().slice(0, 3);
-    var outbound = document.getElementById("f-out").value || "2026-12-04";
-    var flights = buildFlights(origin, destination, outbound);
+  function readSearch() {
+    var origin = document.getElementById("f-origin");
+    var destination = document.getElementById("f-dest");
+    return {
+      origin: (origin.dataset.iata || origin.value || "BIO").toUpperCase().slice(0, 3),
+      destination: (destination.dataset.iata || destination.value || "BOG").toUpperCase().slice(0, 3),
+      outbound_date: document.getElementById("f-out").value || "2026-12-04",
+      return_date: document.getElementById("f-ret").value || null
+    };
+  }
 
-    if (REDUCED) {
-      renderFlights(flights);
+  function scan() {
+    if (REDUCED) return;
+    dash.classList.add("is-scanning");
+    window.setTimeout(function () { dash.classList.remove("is-scanning"); }, 900);
+  }
+
+  function runSearch() {
+    var query = readSearch();
+
+    if (hooks.search) {
+      scan();
+      renderSkeletons(4);
+      hooks.search(query).then(renderFlights).catch(function (error) {
+        showMessage(error.message || "The search failed.", "error");
+      });
       return;
     }
 
-    dash.classList.add("is-scanning");
-    window.setTimeout(function () { dash.classList.remove("is-scanning"); }, 900);
+    var flights = buildDemoFlights(query.origin, query.destination, query.outbound_date);
+    if (REDUCED) return renderFlights(flights);
+
+    scan();
     renderSkeletons(4);
     window.setTimeout(function () { renderFlights(flights); }, 1250);
   }
@@ -454,35 +688,16 @@
     });
   });
 
-  /* ---------------- live repository stats ---------------- */
-
-  function short(value) {
-    return value >= 1000 ? (value / 1000).toFixed(1).replace(/\.0$/, "") + "k" : String(value);
-  }
-
-  fetch("https://api.github.com/repos/HaroldMate1/SkyBuddy")
-    .then(function (response) { return response.ok ? response.json() : null; })
-    .then(function (data) {
-      if (!data) return;
-      var stars = document.getElementById("stat-stars");
-      var forks = document.getElementById("stat-forks");
-      if (stars) stars.textContent = "★ " + short(data.stargazers_count) + " stars";
-      if (forks) forks.textContent = "⑂ " + short(data.forks_count) + " forks";
-    })
-    .catch(function () { /* pills keep their placeholder text */ });
-
-
-  /* ---------------- background: drifting clouds with changing faces ---------------- */
+  /* ---------------- background: drifting clouds ---------------- */
 
   var CLOUD_TINTS = [
-    { id: "amethyst", top: "#c8b0ff", bottom: "#8f5cff", glow: "rgba(155,107,255,0.55)" },
-    { id: "cyan", top: "#c9fbff", bottom: "#00d6f0", glow: "rgba(0,240,255,0.5)" },
-    { id: "magenta", top: "#ffc2e0", bottom: "#ff2f92", glow: "rgba(255,0,127,0.45)" },
-    { id: "lime", top: "#e6ffb8", bottom: "#a5f02a", glow: "rgba(180,255,57,0.4)" },
-    { id: "ice", top: "#dbe9ff", bottom: "#7ea8e8", glow: "rgba(120,180,255,0.45)" }
+    { top: "#c8b0ff", bottom: "#8f5cff", glow: "rgba(155,107,255,0.55)" },
+    { top: "#c9fbff", bottom: "#00d6f0", glow: "rgba(0,240,255,0.5)" },
+    { top: "#ffc2e0", bottom: "#ff2f92", glow: "rgba(255,0,127,0.45)" },
+    { top: "#e6ffb8", bottom: "#a5f02a", glow: "rgba(180,255,57,0.4)" },
+    { top: "#dbe9ff", bottom: "#7ea8e8", glow: "rgba(120,180,255,0.45)" }
   ];
 
-  /* placement is fixed so the layout never jumps between reloads */
   var CLOUD_LAYOUT = [
     { tint: 0, width: 210, top: "13%", left: "3%", delay: 0.0, small: false },
     { tint: 1, width: 150, top: "58%", left: "88%", delay: 0.7, small: false },
@@ -493,9 +708,9 @@
 
   function buildClouds() {
     var host = document.getElementById("clouds");
-    if (!host) return [];
+    if (!host) return;
 
-    return CLOUD_LAYOUT.map(function (spec, index) {
+    CLOUD_LAYOUT.forEach(function (spec, index) {
       var tint = CLOUD_TINTS[spec.tint];
       var wrapper = document.createElement("div");
       wrapper.className = "cloud" + (spec.small ? " cloud--small" : "");
@@ -506,7 +721,6 @@
       wrapper.style.animationDelay = spec.delay + "s, " + (spec.delay + 1.2) + "s, " + (spec.delay + 0.4) + "s";
       wrapper.style.animationDuration = "1.4s, " + (6 + index * 0.7) + "s, " + (30 + index * 5) + "s";
       wrapper.style.filter = "drop-shadow(0 18px 34px " + tint.glow + ")";
-
       wrapper.innerHTML =
         '<svg viewBox="0 0 64 48" xmlns="http://www.w3.org/2000/svg">' +
           "<defs>" +
@@ -522,18 +736,12 @@
             '<circle cx="33" cy="19" r="13"/>' +
           "</g>" +
         "</svg>";
-
       host.appendChild(wrapper);
-      return wrapper;
     });
   }
 
   /* ---------------- a paper plane looping across the sky ---------------- */
 
-  /* The flight path is a real curve: it climbs, throws an elliptical loop
-     mid-screen, then descends out the far side. `offset-path` moves the plane
-     along it and `offset-rotate: auto` keeps the nose pointing exactly where
-     it is going, while the body rolls for a three-dimensional feel. */
   function flightPath(eastbound) {
     var width = window.innerWidth;
     var height = window.innerHeight;
@@ -570,9 +778,6 @@
     plane.className = "plane";
     plane.style.offsetPath = 'path("' + flightPath(eastbound) + '")';
     plane.style.animationDuration = duration + "s";
-
-    /* real geometry, not a flat icon: two wings folded along the fuselage
-       plus a keel, so rolling the body actually shows depth */
     plane.innerHTML =
       '<div class="plane__body">' +
         '<span class="pf pf--wing-top"></span>' +
@@ -592,18 +797,67 @@
     }, 14000);
   }
 
-  /* ---------------- boot ---------------- */
+  /* ---------------- live repository stats ---------------- */
 
-  function escapeHtml(value) {
-    return String(value).replace(/[&<>"']/g, function (character) {
-      return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[character];
-    });
+  function short(value) {
+    return value >= 1000 ? (value / 1000).toFixed(1).replace(/\.0$/, "") + "k" : String(value);
   }
+
+  fetch("https://api.github.com/repos/HaroldMate1/SkyBuddy")
+    .then(function (response) { return response.ok ? response.json() : null; })
+    .then(function (data) {
+      if (!data) return;
+      var stars = document.getElementById("stat-stars");
+      var forks = document.getElementById("stat-forks");
+      if (stars) stars.textContent = "★ " + short(data.stargazers_count) + " stars";
+      if (forks) forks.textContent = "⑂ " + short(data.forks_count) + " forks";
+    })
+    .catch(function () { /* pills keep their placeholder text */ });
+
+  /* ---------------- public surface for live.js ---------------- */
+
+  window.SkyBuddy = {
+    hooks: hooks,
+    money: money,
+    escapeHtml: escapeHtml,
+    minutesToText: minutesToText,
+    timeOf: timeOf,
+    verdictFor: verdictFor,
+    VERDICTS: VERDICTS,
+    sparkline: sparkline,
+    renderFlights: renderFlights,
+    renderSkeletons: renderSkeletons,
+    showMessage: showMessage,
+    readSearch: readSearch,
+    runSearch: runSearch,
+    scan: scan,
+    elements: {
+      dash: dash,
+      results: results,
+      usersRow: usersRow,
+      trackedBox: trackedBox,
+      trackedList: trackedList,
+      trackedTitle: trackedTitle,
+      trackedCount: trackedCount
+    },
+    setMode: function (next) {
+      mode = next;
+      document.body.dataset.mode = next;
+      if (usersRow) usersRow.hidden = next !== "demo";
+      if (next === "demo") {
+        renderUsers();
+        renderTracked();
+      }
+    }
+  };
+
+  /* ---------------- boot ---------------- */
 
   buildClouds();
   scheduleFlights();
-
+  attachAutocomplete(document.getElementById("f-origin"));
+  attachAutocomplete(document.getElementById("f-dest"));
   renderUsers();
   renderTracked();
-  renderFlights(buildFlights("BIO", "BOG", "2026-12-04"));
+  renderFlights(buildDemoFlights("BIO", "BOG", "2026-12-04"));
 })();

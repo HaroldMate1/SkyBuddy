@@ -35,6 +35,7 @@
       <a href="#booking">Agent booking</a>
       <a href="#quickstart">Quick start</a>
       <a href="#tools">MCP tools</a>
+      <button class="btn btn--sm" id="auth-btn" type="button">Sign in</button>
       <a class="btn btn--sm btn--primary" href="https://github.com/HaroldMate1/SkyBuddy" target="_blank" rel="noopener">GitHub</a>
     </nav>
   </div>
@@ -70,7 +71,10 @@
       </svg>
       <div class="dash__laser" aria-hidden="true"></div>
 
-      <!-- traveller switcher -->
+      <!-- signed-in account -->
+      <div class="account" id="account" hidden></div>
+
+      <!-- traveller switcher (preview mode) -->
       <div class="users" id="users">
         <span class="users__label">Traveller</span>
         <div class="users__list" id="users-list"></div>
@@ -458,6 +462,23 @@ python scripts/price_baseline.py trigger --origin BIO --destination BOG \
 
 <div class="tip" id="tip" role="status"></div>
 
+<!-- sign-in -->
+<div class="auth" id="auth-modal" hidden>
+  <div class="auth__panel glass" role="dialog" aria-modal="true" aria-labelledby="auth-title">
+    <button class="auth__close" id="auth-close" type="button" aria-label="Close">✕</button>
+    <p class="eyebrow">SkyBuddy account</p>
+    <h3 id="auth-title">Sign in with a magic link</h3>
+    <p>Type your email and we send you a one-click link. No password to remember,
+       and your tracked flights follow you to any device.</p>
+    <form id="auth-form">
+      <input id="auth-email" type="email" required placeholder="you@example.com" autocomplete="email">
+      <button class="btn btn--primary" type="submit">Send the link</button>
+    </form>
+    <p class="auth__note" id="auth-note"></p>
+  </div>
+</div>
+
 <script src="/app.js"></script>
+<script type="module" src="/live.js"></script>
 </body>
 </html>

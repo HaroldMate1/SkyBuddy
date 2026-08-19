@@ -6,6 +6,17 @@
   "outputDirectory": "web",
   "cleanUrls": true,
   "trailingSlash": false,
+  "crons": [
+    {
+      "path": "/api/cron/check-prices",
+      "schedule": "0 6 * * *"
+    }
+  ],
+  "functions": {
+    "api/cron/check-prices.js": { "maxDuration": 300 },
+    "api/search.js": { "maxDuration": 30 },
+    "api/check.js": { "maxDuration": 60 }
+  },
   "headers": [
     {
       "source": "/(.*)",
@@ -17,9 +28,11 @@
     },
     {
       "source": "/(.*).(css|js|jpg|png|svg|webp)",
-      "headers": [
-        { "key": "Cache-Control", "value": "public, max-age=3600, s-maxage=86400" }
-      ]
+      "headers": [{ "key": "Cache-Control", "value": "public, max-age=3600, s-maxage=86400" }]
+    },
+    {
+      "source": "/data/(.*).json",
+      "headers": [{ "key": "Cache-Control", "value": "public, max-age=86400, s-maxage=604800" }]
     }
   ]
 }

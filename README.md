@@ -40,7 +40,7 @@
 ## Table of contents
 
 - [What SkyBuddy does](#what-skybuddy-does)
-- [The website](#the-website)
+- [The web app](#the-web-app)
 - [Quick start](#quick-start)
 - [Configuration](#configuration)
 - [Features in depth](#features-in-depth)
@@ -55,7 +55,7 @@
   - [8. Flexible-date Google Flights sweeps](#8-flexible-date-google-flights-sweeps)
 - [MCP tool reference](#mcp-tool-reference)
 - [Python API reference](#python-api-reference)
-- [Deploying the website to Vercel](#deploying-the-website-to-vercel)
+- [Deploying and configuring the web app](#deploying-and-configuring-the-web-app)
 - [Measuring usage](#measuring-usage)
 - [Files and data](#files-and-data)
 - [Environment variables](#environment-variables)
@@ -73,6 +73,7 @@ so Claude, Hermes, OpenClaw or your own agent all get the same 30 tools.
 
 | | Capability | Module |
 |---|---|---|
+| 🌐 | **Live web app** — sign-in, tracked flights stored online, nightly checks, email alerts | `web/`, `api/`, `server/` |
 | 👥 | **A separate workspace per traveller** — routes, alerts, bookings, history | `users.py` |
 | 🔎 | Real-time search across Duffel plus 7 booking sources | `flight_scraper.py`, `duffel_client.py` |
 | 📈 | Unlimited watched routes with full price history | `flight_monitor.py`, `preferences.py` |
@@ -89,10 +90,25 @@ so Claude, Hermes, OpenClaw or your own agent all get the same 30 tools.
 
 ---
 
-## The website
+## The web app
 
-The landing page is live at **[skybuddy-ochre.vercel.app](https://skybuddy-ochre.vercel.app)**.
-It lives in [`web/`](web) and ships with a `vercel.json`, so the repository deploys to Vercel as-is. Deep royal-blue to indigo gradient, glassmorphic panels, neon
+Live at **[skybuddy-ochre.vercel.app](https://skybuddy-ochre.vercel.app)**.
+
+Signed out, it is an interactive preview. Signed in, it is the real thing:
+
+- **Magic-link sign-in** through Supabase Auth — no passwords anywhere.
+- **Airport and city autocomplete** on the search fields, over 3,270 airports
+  with scheduled service; type `bilb`, `new york` or `JFK`.
+- **Live fares** from Duffel, fetched server-side so the API key never reaches
+  the browser.
+- **Tracked flights stored per account**, with every observed price kept, so the
+  low / median / high on each card is your own recorded history.
+- **A nightly check** (Vercel Cron) that re-prices every tracked route.
+- **Email alerts** through Resend when your target is met, a new low is set, or
+  the fare drops 10%+ since the last check.
+
+Setup — Supabase, Duffel, Resend and the environment variables — is documented
+step by step in **[docs/web-app-setup.md](docs/web-app-setup.md)**. Deep royal-blue to indigo gradient, glassmorphic panels, neon
 cyan and magenta accents, drifting clouds and a paper plane looping across the sky.
 See [Deploying the website to Vercel](#deploying-the-website-to-vercel).
 
@@ -715,34 +731,53 @@ Constant: `LONG_HAUL_THRESHOLD_MINUTES` (480)
 
 ---
 
-## Deploying the website to Vercel
+## Deploying and configuring the web app
 
-The site is static — no build step, no dependencies.
+The site is static and the API is a handful of dependency-free serverless
+functions, so there is no build step.
 
 1. Push this repository to GitHub.
 2. In Vercel: **Add New → Project → Import** `HaroldMate1/SkyBuddy`.
-3. Leave every field at its default. `vercel.json` already sets framework *none*, no build command and
-   `outputDirectory: "web"`.
-4. **Deploy.**
+3. Leave the defaults — `vercel.json` sets framework *none*, no build command,
+   `outputDirectory: "web"`, the `/api` functions and the daily cron.
+4. **Deploy**, then add the environment variables from
+   [docs/web-app-setup.md](docs/web-app-setup.md) and redeploy.
 
 Or from the CLI:
 
 ```bash
 npm i -g vercel
-vercel          # preview deployment
-vercel --prod   # production
+vercel --prod
 ```
 
-Local preview:
+### What lives where
+
+| Path | Role |
+|---|---|
+| `web/` | The static site: markup, design system, demo dashboard, autocomplete |
+| `web/live.js` | Live mode — Supabase auth, tracked flights, live search |
+| `web/data/airports.json` | 3,270 airports for the search autocomplete |
+| `api/config.js` | Public runtime config + feature flags for the browser |
+| `api/search.js` | Authenticated live fare search (Duffel, server-side) |
+| `api/check.js` | "Check now" for one tracked flight |
+| `api/cron/check-prices.js` | The nightly sweep that raises and emails alerts |
+| `server/` | Shared Duffel, Supabase REST, alert-rule and email helpers |
+| `supabase/schema.sql` | Tables, row-level security and the signup trigger |
+
+### Environment variables
 
 ```bash
-python -m http.server 8899 --directory web
-# → http://localhost:8899
+SUPABASE_URL=                 # project URL
+SUPABASE_ANON_KEY=            # public key, safe in the browser
+SUPABASE_SERVICE_ROLE_KEY=    # server only — used by the cron sweep
+DUFFEL_API_KEY=               # live fares
+RESEND_API_KEY=               # alert emails
+ALERT_FROM_EMAIL="SkyBuddy <onboarding@resend.dev>"
+CRON_SECRET=                  # protects /api/cron/check-prices
 ```
 
-Editing: `web/index.html` (content), `web/styles.css` (design tokens at the top — colours,
-glass, motion), `web/app.js` (traveller switcher, demo search, sparklines, background clouds
-and the looping paper plane, live GitHub counters). `web/logo.svg` is the cloud mark.
+Local preview: `vercel dev` (full app), or
+`python -m http.server 8899 --directory web` for the signed-out experience.
 
 ---
 

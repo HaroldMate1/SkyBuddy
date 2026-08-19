@@ -1,0 +1,145 @@
+# Turning the site into the live app
+
+The website works with no configuration at all — signed-out visitors get the
+interactive preview. Adding the four services below turns it into a real
+product: accounts, tracked flights stored online, nightly price checks and
+email alerts.
+
+Everything is plain HTTP from Vercel functions, so there is still no build
+step and no `node_modules`.
+
+---
+
+## What you create, and what it costs
+
+| Service | Why | Free tier |
+|---|---|---|
+| **Supabase** | Accounts (magic-link sign-in) + the database holding tracked flights, price history and alerts | Free project is enough |
+| **Duffel** | Live fares for the scheduled checks | Free test mode; live mode needs their approval |
+| **Resend** | Sends the price-drop emails | 3,000 emails/month free |
+| **Vercel** | Hosting, the API functions and the nightly cron | Already set up |
+
+---
+
+## 1 · Supabase
+
+1. Create a project at [supabase.com](https://supabase.com) (any region near you).
+2. Open **SQL Editor → New query**, paste all of
+   [`supabase/schema.sql`](../supabase/schema.sql), and run it. It creates
+   `profiles`, `tracked_flights`, `price_observations` and `alerts`, switches on
+   row-level security, and adds the trigger that creates a profile on signup.
+3. Open **Authentication → URL configuration** and set:
+   - **Site URL**: `https://skybuddy-ochre.vercel.app`
+   - **Redirect URLs**: add `https://skybuddy-ochre.vercel.app` and, if you want
+     to test locally, `http://localhost:8899`
+4. Open **Authentication → Providers → Email** and make sure *Email* is enabled.
+   Magic links are on by default; you can turn "Confirm email" off for a
+   friendlier first run.
+5. Copy from **Project Settings → API**:
+   - `Project URL` → `SUPABASE_URL`
+   - `anon public` key → `SUPABASE_ANON_KEY`
+   - `service_role` key → `SUPABASE_SERVICE_ROLE_KEY` **(server only — never put
+     this in the browser)**
+
+> Supabase's built-in email sender is rate-limited (a few messages an hour). For
+> real sign-in volume, add your own SMTP under **Authentication → Emails → SMTP**,
+> or point it at Resend.
+
+## 2 · Duffel
+
+1. Sign up at [duffel.com](https://duffel.com) and open **Developers → Access tokens**.
+2. Create a **test** token to start (`duffel_test_...`) → `DUFFEL_API_KEY`.
+3. Test mode returns Duffel's sandbox inventory, which is perfect for checking
+   the whole loop. Switch the token to a live one (`duffel_live_...`) once they
+   approve your account, and nothing else changes.
+
+## 3 · Resend
+
+1. Sign up at [resend.com](https://resend.com) → **API Keys → Create**.
+2. Copy the key → `RESEND_API_KEY`.
+3. Sending address → `ALERT_FROM_EMAIL`:
+   - Straight away: `SkyBuddy <onboarding@resend.dev>` (works without a domain,
+     but only delivers to your own verified address).
+   - Properly: verify a domain in Resend and use `SkyBuddy <alerts@yourdomain>`.
+
+## 4 · Vercel environment variables
+
+**Project → Settings → Environment Variables** (Production *and* Preview):
+
+```
+SUPABASE_URL=https://xxxxxxxx.supabase.co
+SUPABASE_ANON_KEY=eyJhbGci...
+SUPABASE_SERVICE_ROLE_KEY=eyJhbGci...
+DUFFEL_API_KEY=duffel_test_...
+RESEND_API_KEY=re_...
+ALERT_FROM_EMAIL=SkyBuddy <onboarding@resend.dev>
+CRON_SECRET=<any long random string>
+```
+
+Then **redeploy** (Deployments → ⋯ → Redeploy) so the functions pick them up.
+
+Check it worked by opening `https://skybuddy-ochre.vercel.app/api/config` —
+every flag under `features` should be `true`.
+
+---
+
+## How the pieces fit
+
+```
+browser ──sign in (magic link)──▶ Supabase Auth
+   │
+   ├── reads/writes tracked_flights, price_observations, alerts
+   │        directly with the anon key, constrained by RLS
+   │
+   ├── POST /api/search  ──▶ Duffel        (key stays server-side)
+   └── POST /api/check   ──▶ Duffel + Supabase + Resend
+
+Vercel Cron ──06:00 UTC daily──▶ GET /api/cron/check-prices
+                                   ├─ re-prices every active tracked flight
+                                   ├─ stores an observation
+                                   ├─ refreshes low / median / high
+                                   └─ emails when a rule fires
+```
+
+### When an email goes out
+
+| Rule | Fires when |
+|---|---|
+| `target_reached` | The fare is at or below the target the traveller set |
+| `new_low` | The fare beats every price recorded for that route (needs 3+ observations) |
+| `price_drop` | The fare is 10% or more below the previous check |
+
+The same alert kind is not repeated for the same flight within 20 hours, so a
+route that stays cheap does not mail every night.
+
+### Changing the schedule
+
+`vercel.json` → `crons[0].schedule` (cron syntax, UTC). `0 6 * * *` is daily at
+06:00 UTC. Hobby projects on Vercel run cron jobs once a day; Pro allows more
+frequent schedules.
+
+---
+
+## Local development
+
+```bash
+npm i -g vercel
+vercel dev          # serves web/ and the /api functions with your env vars
+```
+
+Plain `python -m http.server --directory web 8899` also works, but `/api/*`
+returns 404, so the site stays in preview mode — which is a good way to check
+the signed-out experience.
+
+---
+
+## Troubleshooting
+
+| Symptom | Cause |
+|---|---|
+| "Sign-in is not configured yet" | `SUPABASE_URL` / `SUPABASE_ANON_KEY` missing, or no redeploy after adding them |
+| Magic link opens the site but stays signed out | The Site URL / Redirect URLs in Supabase do not match the deployment URL |
+| "Live search is not configured" | `DUFFEL_API_KEY` missing |
+| Search returns "Duffel search failed (401)" | The token is wrong, or a live token is used on a test account |
+| Alerts appear in the dashboard but no email arrives | `RESEND_API_KEY` missing, or the from-address domain is not verified in Resend |
+| Cron never runs | Redeploy after adding `crons` to `vercel.json`; check Vercel → Project → Cron Jobs |

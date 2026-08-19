@@ -7,7 +7,7 @@
  */
 
 const { admin, getUser, bearerToken } = require("../server/supabase");
-const { checkTrackedFlight } = require("../server/tracking");
+const { checkTrackedFlight, MIN_CHECK_SECONDS } = require("../server/tracking");
 
 module.exports = async (req, res) => {
   if (req.method !== "POST") {
@@ -46,7 +46,11 @@ module.exports = async (req, res) => {
         display_name: profile.display_name,
         email_alerts: profile.email_alerts,
       },
-      { duffelKey: process.env.DUFFEL_API_KEY, sendEmail: true }
+      {
+        duffelKey: process.env.DUFFEL_API_KEY,
+        sendEmail: true,
+        minIntervalSeconds: MIN_CHECK_SECONDS,
+      }
     );
 
     return res.status(200).json(result);

@@ -5,7 +5,7 @@
  * access token, this function verifies it and does the search server-side.
  */
 
-const { searchFlights } = require("../server/duffel");
+const { searchFlights, isSandbox } = require("../server/duffel");
 const { getUser, bearerToken } = require("../server/supabase");
 
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
@@ -55,6 +55,7 @@ module.exports = async (req, res) => {
       destination,
       outbound_date: body.outbound_date,
       return_date: body.return_date || null,
+      sandbox: isSandbox(),
       count: offers.length,
       offers: offers.slice(0, 12),
     });

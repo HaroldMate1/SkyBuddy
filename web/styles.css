@@ -1073,3 +1073,184 @@ footer { border-top: 1px solid rgba(169, 184, 212, 0.12); padding: 34px 0 52px; 
 .results__msg.is-error { color: #ffc6e0; border-left: 3px solid var(--magenta); }
 .trend__empty { margin: 6px 0 0; font-size: 11.5px; color: var(--ice-dim); }
 .track-row__spark { display: block; width: 150px; }
+
+/* =====================================================================
+   Small screens — phone and tablet only.
+   Everything above 1024px keeps the desktop layout untouched.
+   ===================================================================== */
+
+/* ---------- tablet / iPad (portrait and landscape) ---------- */
+@media (max-width: 1024px) {
+  section { padding: 68px 0; }
+  .wrap { padding: 0 20px; }
+
+  .hero { padding: 56px 0 40px; }
+  .hero h1 { font-size: clamp(34px, 6.4vw, 52px); }
+  .hero .lede { font-size: 17px; }
+
+  .dash { padding: 20px; margin-top: 34px; }
+
+  /* two fields per row reads better than four squeezed ones */
+  .dash__fields { grid-template-columns: 1fr 1fr; gap: 2px; }
+  .field { padding: 11px 14px; }
+  .field input, .field select { font-size: 16px; } /* 16px stops iOS zooming on focus */
+  .field--action { grid-column: 1 / -1; }
+  .field--action .btn { width: 100%; }
+
+  /* the flight card becomes two rows instead of four columns */
+  .flight {
+    grid-template-columns: 1fr 1fr;
+    row-gap: 16px;
+    padding: 18px 20px;
+  }
+  /* place explicitly, otherwise the price falls onto a row of its own and
+     leaves a hole the size of the card */
+  .flight__airline { grid-column: 1; grid-row: 1; }
+  .flight__price { grid-column: 2; grid-row: 1; align-items: flex-end; text-align: right; }
+  .flight__route { grid-column: 1 / -1; grid-row: 2; padding-left: 0; }
+  .flight__trend { grid-column: 1 / -1; grid-row: 3; }
+  .flight > * + * { border-image: none; border-left: 0; padding-left: 0; }
+
+  /* a sparkline stretched across the whole tablet width reads as a mountain
+     range, not a price trend — keep it card-sized and left aligned */
+  .flight__trend .spark { height: 46px; max-width: 320px; }
+  .flight__price { gap: 10px; }
+
+  .cards { grid-template-columns: repeat(2, 1fr); }
+  .stats { grid-template-columns: repeat(2, 1fr); }
+  .spotlight { padding: 28px; }
+  .spotlight-grid { grid-template-columns: 1fr; gap: 28px; }
+
+  .account { gap: 10px; }
+  .account__toggle { margin-left: 0; }
+
+  .panel-shell pre { font-size: 12px; padding: 18px; }
+
+  /* keep the sky decorative, not dominant */
+  .cloud { transform: scale(0.72); opacity: 0.6 !important; }
+  .plane { width: 76px; }
+}
+
+/* ---------- phone ---------- */
+@media (max-width: 680px) {
+  section { padding: 52px 0; }
+  .wrap { padding: 0 16px; }
+
+  header.nav { }
+  .nav-inner { height: 62px; gap: 12px; }
+  .brand { font-size: 16px; }
+  .brand img { width: 30px; }
+  .nav-links { gap: 8px; }
+  .nav-links .btn { padding: 8px 14px; font-size: 12.5px; }
+
+  .hero { padding: 40px 0 28px; }
+  .hero h1 { font-size: clamp(30px, 8.4vw, 38px); }
+  .hero .lede { font-size: 15.5px; }
+  .hero-cta { gap: 10px; margin-bottom: 20px; }
+  .hero-cta .btn { flex: 1 1 100%; }
+  .pills { gap: 6px; }
+  .pill { font-size: 11px; padding: 5px 10px; }
+
+  .dash { padding: 14px; border-radius: 18px; }
+
+  /* one field per row: the whole point on a phone is not to mis-tap */
+  .dash__fields { grid-template-columns: 1fr; }
+  .field { padding: 12px 14px; }
+  .field + .field { border-top: 1px solid rgba(169, 184, 212, 0.12); }
+  .field__caption { font-size: 10.5px; }
+
+  /* the dropdown must never push the page sideways */
+  .combo {
+    left: 0;
+    right: 0;
+    min-width: 0;
+    width: 100%;
+    max-height: 46vh;
+  }
+  .combo__item { padding: 11px 10px; }
+  .combo__code { flex-basis: 40px; font-size: 12.5px; }
+
+  /* travellers and account stack */
+  .users { gap: 8px; padding-bottom: 14px; }
+  .users__hint { display: none; }
+  .account { flex-direction: column; align-items: flex-start; padding-bottom: 14px; }
+  .account__toggle { font-size: 12.5px; }
+  .account__warn { font-size: 11px; }
+
+  /* flight card: single column, generous tap targets */
+  /* single column: clear the explicit placement from the tablet rules,
+     otherwise the price sits on top of the airline */
+  .flight { grid-template-columns: 1fr; padding: 16px; row-gap: 12px; }
+  .flight__airline, .flight__route, .flight__trend, .flight__price {
+    grid-column: 1;
+    grid-row: auto;
+  }
+  .flight__price { align-items: flex-start; text-align: left; width: 100%; }
+  .flight__price .btn { width: 100%; }
+  .price { font-size: 27px; }
+  .leg__time { font-size: 18px; }
+  .path { min-width: 48px; }
+  .path__meta { font-size: 10.5px; }
+  .trend__stats { font-size: 10px; gap: 8px; }
+
+  /* tracked rows read as small cards */
+  .tracked { margin-top: 20px; padding-top: 18px; }
+  .track-row { flex-direction: column; align-items: flex-start; gap: 8px; padding: 14px; }
+  .track-row__price { margin-left: 0; font-size: 22px; }
+  .track-row__spark { width: 100%; }
+  .flight__trend .spark { max-width: none; }
+  .track-row .btn { width: 100%; }
+  .track-row__x { position: absolute; top: 10px; right: 12px; }
+
+  .stats { grid-template-columns: 1fr 1fr; gap: 10px; }
+  .stat { padding: 16px; }
+  .stat b { font-size: 26px; }
+
+  .cards { grid-template-columns: 1fr; }
+  .card { padding: 20px; }
+
+  .spotlight { padding: 20px; border-radius: 18px; }
+  .steps span { font-size: 13.5px; }
+
+  .tabs { gap: 6px; }
+  .tab { padding: 8px 13px; font-size: 12.5px; }
+  .panel-shell pre { font-size: 11px; padding: 14px; line-height: 1.65; }
+
+  th, td { padding: 11px 14px; font-size: 13px; }
+
+  .cta { padding: 36px 20px; }
+  .foot { flex-direction: column; align-items: flex-start; gap: 12px; }
+
+  .auth { padding: 16px; }
+  .auth__panel { padding: 24px 20px; }
+  .auth__panel h3 { font-size: 21px; }
+  .auth__panel form { flex-direction: column; }
+  .auth__panel input, .auth__panel .btn { width: 100%; }
+
+  /* one small cloud is atmosphere; five is clutter on a 390px screen */
+  .cloud { transform: scale(0.55); opacity: 0.42 !important; }
+  .cloud--small { display: none; }
+  .plane { width: 58px; }
+
+  /* tooltips follow a finger badly — the numbers are already on the card */
+  .tip { display: none; }
+}
+
+/* ---------- small phones ---------- */
+@media (max-width: 430px) {
+  .hero h1 { font-size: 29px; }
+  .brand span, .brand { gap: 8px; }
+  .nav-links .btn { padding: 7px 11px; font-size: 12px; }
+  .stats { grid-template-columns: 1fr; }
+  .price { font-size: 24px; }
+  .section-head { margin-bottom: 30px; }
+  h2 { font-size: 25px; }
+}
+
+/* ---------- touch devices: bigger targets, no hover lift ---------- */
+@media (hover: none) {
+  .btn { min-height: 44px; }
+  .tab { min-height: 40px; }
+  .combo__item { min-height: 46px; }
+  .flight:hover, .card:hover { transform: none; }
+}

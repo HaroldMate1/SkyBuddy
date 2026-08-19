@@ -7,6 +7,16 @@
 const DUFFEL_URL = "https://api.duffel.com/air/offer_requests?return_offers=true&supplier_timeout=20000";
 const CABINS = new Set(["economy", "premium_economy", "business", "first"]);
 
+/**
+ * Duffel test tokens return randomly generated inventory: the same route
+ * priced seconds apart comes back with different carriers and fares. Anything
+ * derived from it is a rehearsal, not a price history, so the whole app labels
+ * it rather than pretending otherwise.
+ */
+function isSandbox(apiKey) {
+  return String(apiKey || process.env.DUFFEL_API_KEY || "").startsWith("duffel_test_");
+}
+
 /** Build the Google Flights deep link SkyBuddy uses as the bookable URL. */
 function googleFlightsUrl({ origin, destination, outbound_date, return_date }) {
   const query = return_date
@@ -109,4 +119,4 @@ async function searchFlights(request, apiKey) {
   return { offers, cheapest: offers[0] || null };
 }
 
-module.exports = { searchFlights, googleFlightsUrl, durationMinutes };
+module.exports = { searchFlights, googleFlightsUrl, durationMinutes, isSandbox };

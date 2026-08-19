@@ -5,7 +5,7 @@
  * Shared by the cron sweep and the "check now" button.
  */
 
-const { searchFlights } = require("./duffel");
+const { searchFlights, isSandbox } = require("./duffel");
 const { admin } = require("./supabase");
 const { sendAlertEmail } = require("./email");
 
@@ -14,6 +14,13 @@ const DROP_THRESHOLD = 0.9;
 
 /** Do not repeat the same kind of alert for the same flight within this window. */
 const ALERT_COOLDOWN_HOURS = 20;
+
+/**
+ * Shortest gap between two manual checks of the same flight. Without it a
+ * double-click writes two observations seconds apart, which says nothing about
+ * the fare and skews the median.
+ */
+const MIN_CHECK_SECONDS = 120;
 
 function median(values) {
   if (!values.length) return null;
@@ -71,10 +78,22 @@ async function recentlyAlerted(flightId, kind) {
  * Check one tracked flight.
  *
  * @param {object} flight  row from tracked_flights
- * @param {object} options { duffelKey, sendEmail }
+ * @param {object} options { duffelKey, sendEmail, minIntervalSeconds }
  * @returns {Promise<object>} what happened, for the API response and logs
  */
-async function checkTrackedFlight(flight, { duffelKey, sendEmail = true } = {}) {
+async function checkTrackedFlight(flight, { duffelKey, sendEmail = true, minIntervalSeconds = 0 } = {}) {
+  if (minIntervalSeconds && flight.last_checked_at) {
+    const secondsSince = (Date.now() - new Date(flight.last_checked_at).getTime()) / 1000;
+    if (secondsSince < minIntervalSeconds) {
+      return {
+        flight_id: flight.id,
+        status: "too_soon",
+        retry_in_seconds: Math.ceil(minIntervalSeconds - secondsSince),
+      };
+    }
+  }
+
+  const sandbox = isSandbox(duffelKey);
   const { cheapest } = await searchFlights(
     {
       origin: flight.origin,
@@ -107,7 +126,7 @@ async function checkTrackedFlight(flight, { duffelKey, sendEmail = true } = {}) 
       currency,
       airline: cheapest.airline,
       booking_url: cheapest.booking_url,
-      source: "duffel",
+      source: sandbox ? "duffel_test" : "duffel",
     },
     prefer: "return=minimal",
   });
@@ -159,6 +178,7 @@ async function checkTrackedFlight(flight, { duffelKey, sendEmail = true } = {}) 
       message: alert.message,
       bookingUrl: cheapest.booking_url,
       airline: cheapest.airline,
+      sandbox,
     });
   }
 
@@ -189,4 +209,4 @@ async function checkTrackedFlight(flight, { duffelKey, sendEmail = true } = {}) 
   };
 }
 
-module.exports = { checkTrackedFlight, classify, median };
+module.exports = { checkTrackedFlight, classify, median, MIN_CHECK_SECONDS };

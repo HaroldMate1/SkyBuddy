@@ -15,6 +15,7 @@ module.exports = (req, res) => {
       liveSearch: Boolean(process.env.DUFFEL_API_KEY),
       emailAlerts: Boolean(process.env.RESEND_API_KEY),
       tracking: Boolean(process.env.SUPABASE_SERVICE_ROLE_KEY),
+      sandbox: String(process.env.DUFFEL_API_KEY || "").startsWith("duffel_test_"),
     },
   });
 };

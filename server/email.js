@@ -28,7 +28,7 @@ function money(value, currency) {
   return value === null || value === undefined ? "—" : `${currency} ${Number(value).toFixed(2)}`;
 }
 
-function buildHtml({ name, flight, price, currency, previousPrice, stats, message, bookingUrl, airline }) {
+function buildHtml({ name, flight, price, currency, previousPrice, stats, message, bookingUrl, airline, sandbox }) {
   const dates = flight.return_date
     ? `${flight.outbound_date} → ${flight.return_date}`
     : flight.outbound_date;
@@ -70,6 +70,14 @@ function buildHtml({ name, flight, price, currency, previousPrice, stats, messag
       </p>
     </div>
 
+    ${
+      sandbox
+        ? `<p style="margin:18px 0 0;padding:12px 16px;border-radius:12px;background:rgba(255,209,102,.12);border-left:3px solid #ffd166;color:#ffdda6;font-size:13px">
+             Duffel is in test mode, so this fare is randomly generated sandbox data — useful for
+             checking that alerts work, not for booking. Switch to a live Duffel token for real prices.
+           </p>`
+        : ""
+    }
     <p style="margin:22px 0 0;font-size:12px;color:#7c8bab">
       You are receiving this because you track this route on SkyBuddy.
       Turn alerts off from your dashboard at any time.
@@ -88,11 +96,13 @@ async function sendAlertEmail(payload) {
   const from = process.env.ALERT_FROM_EMAIL || "SkyBuddy <onboarding@resend.dev>";
   if (!apiKey || !payload.to) return null;
 
-  const subject = (SUBJECTS[payload.kind] || SUBJECTS.price_drop)(
-    payload.flight,
-    Number(payload.price).toFixed(2),
-    payload.currency
-  );
+  const subject =
+    (payload.sandbox ? "[test data] " : "") +
+    (SUBJECTS[payload.kind] || SUBJECTS.price_drop)(
+      payload.flight,
+      Number(payload.price).toFixed(2),
+      payload.currency
+    );
 
   const response = await fetch(RESEND_URL, {
     method: "POST",

@@ -152,6 +152,11 @@ function renderAccount() {
       Email me price alerts
     </label>
     ${features.liveSearch ? "" : '<span class="account__warn">Live search is not configured (DUFFEL_API_KEY)</span>'}
+    ${
+      features.sandbox
+        ? '<span class="account__warn" title="Duffel test tokens invent new inventory on every request, so prices change between identical searches.">Duffel test mode — prices are randomised sandbox data</span>'
+        : ""
+    }
   `;
 
   document.getElementById("alerts-toggle").addEventListener("change", async (event) => {
@@ -348,7 +353,11 @@ async function renderTracked() {
       try {
         const result = await authedFetch("/api/check", { tracked_flight_id: flight.id });
         await renderTracked();
-        if (result.status === "alerted") {
+        if (result.status === "too_soon") {
+          UI.showMessage(
+            `Just checked — SkyBuddy waits ${result.retry_in_seconds}s between manual checks so the history stays meaningful.`
+          );
+        } else if (result.status === "alerted") {
           UI.showMessage(`Alert sent for ${flight.origin} → ${flight.destination}.`);
         }
       } catch (error) {

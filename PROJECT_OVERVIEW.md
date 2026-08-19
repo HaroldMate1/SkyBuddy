@@ -367,7 +367,6 @@ Once live, track:
 
 **License:** Open Source  
 **Author:** Harold Mateo (HaroldMate1)  
-**Built with:** Claude Code (Anthropic)  
 **Created:** July 18, 2026  
 
 ---

@@ -253,4 +253,4 @@ Open source - use freely for personal and commercial projects.
 
 **SkyBuddy: Intelligent flight tracking for humans and agents.** ✈️
 
-Built with Claude Code by HaroldMate1
+Built by HaroldMate1

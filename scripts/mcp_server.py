@@ -134,6 +134,155 @@ class SkyBuddyMCPServer:
                 "description": "List all passenger profiles",
                 "parameters": {},
             },
+            {
+                "name": "prepare_booking",
+                "description": (
+                    "Create a booking intent for a specific flight link. Executes nothing: "
+                    "the intent must be confirmed by a human before the agent may act on it."
+                ),
+                "parameters": {
+                    "booking_url": "Direct link to the flight/offer to book",
+                    "airline": "Airline of the chosen offer",
+                    "origin": "IATA code",
+                    "destination": "IATA code",
+                    "outbound_date": "YYYY-MM-DD",
+                    "price": "Price agreed at search time",
+                    "currency": "Currency of the price (default EUR)",
+                    "return_date": "YYYY-MM-DD (optional)",
+                    "cabin": "economy/business/first (default economy)",
+                    "passengers": "List of passenger profile names",
+                    "max_price": "Hard ceiling; booking is refused above it",
+                    "allow_payment": "Grant payment authority for this intent (default false)",
+                    "notes": "Free-text context stored with the intent",
+                },
+            },
+            {
+                "name": "confirm_booking",
+                "description": (
+                    "Approve a booking intent after a human OK. Re-checks the price ceiling "
+                    "and returns the agent playbook for the booking link."
+                ),
+                "parameters": {
+                    "intent_id": "Intent id returned by prepare_booking",
+                    "approved_by": "Who approved the booking",
+                    "current_price": "Live price to re-validate against the ceiling (optional)",
+                    "allow_payment": "Override payment authority for this intent (optional)",
+                },
+            },
+            {
+                "name": "get_booking_playbook",
+                "description": "Get the step-by-step instructions the agent executes on the booking link",
+                "parameters": {"intent_id": "Intent id"},
+            },
+            {
+                "name": "mark_booking_executed",
+                "description": "Record the outcome of a booking the agent carried out",
+                "parameters": {
+                    "intent_id": "Intent id",
+                    "confirmation_code": "Airline confirmation code",
+                    "amount_paid": "Final amount paid",
+                    "success": "True if the booking completed (default true)",
+                    "detail": "Extra context for the audit trail",
+                },
+            },
+            {
+                "name": "cancel_booking",
+                "description": "Cancel a booking intent before it is executed",
+                "parameters": {
+                    "intent_id": "Intent id",
+                    "reason": "Why it was cancelled",
+                },
+            },
+            {
+                "name": "list_bookings",
+                "description": "List booking intents and their audit trail",
+                "parameters": {
+                    "status": (
+                        "Filter: awaiting_confirmation/ready_to_execute/in_progress/"
+                        "booked/cancelled/failed (optional)"
+                    ),
+                },
+            },
+            {
+                "name": "get_price_baseline",
+                "description": (
+                    "Scan the recorded price history for a route (365 days by default) and "
+                    "return the baseline: min, percentiles, median, trend and buy thresholds."
+                ),
+                "parameters": {
+                    "origin": "IATA code",
+                    "destination": "IATA code",
+                    "days": "Lookback window in days (default 365)",
+                    "outbound_date": "Restrict to this departure date (optional)",
+                },
+            },
+            {
+                "name": "evaluate_price",
+                "description": (
+                    "Compare a live price against the historical baseline and return a verdict: "
+                    "buy_now, good, fair, wait or high."
+                ),
+                "parameters": {
+                    "origin": "IATA code",
+                    "destination": "IATA code",
+                    "price": "Live price to evaluate",
+                    "days": "Lookback window in days (default 365)",
+                    "target_price": "Your target price (optional)",
+                    "outbound_date": "Departure date of the offer (optional)",
+                },
+            },
+            {
+                "name": "auto_book_if_deal",
+                "description": (
+                    "Evaluate a live offer against its 365-day baseline and, when the verdict is "
+                    "buy-worthy, automatically create the booking intent for its link "
+                    "(still pending human confirmation)."
+                ),
+                "parameters": {
+                    "origin": "IATA code",
+                    "destination": "IATA code",
+                    "outbound_date": "YYYY-MM-DD",
+                    "price": "Live price of the offer",
+                    "booking_url": "Link to the offer",
+                    "airline": "Airline of the offer",
+                    "return_date": "YYYY-MM-DD (optional)",
+                    "currency": "Currency (default EUR)",
+                    "passengers": "List of passenger profile names",
+                    "target_price": "Your target price (optional)",
+                    "max_price": "Hard ceiling for the booking intent (optional)",
+                    "days": "Lookback window in days (default 365)",
+                },
+            },
+            {
+                "name": "record_price_observation",
+                "description": "Record one observed price so the historical baseline keeps growing",
+                "parameters": {
+                    "origin": "IATA code",
+                    "destination": "IATA code",
+                    "price": "Observed price",
+                    "currency": "Currency (default EUR)",
+                    "outbound_date": "YYYY-MM-DD (optional)",
+                    "return_date": "YYYY-MM-DD (optional)",
+                    "airline": "Airline of the observed fare (optional)",
+                    "source": "Where the price came from (optional)",
+                    "booking_url": "Link to the observed fare (optional)",
+                },
+            },
+            {
+                "name": "get_seat_advisory",
+                "description": (
+                    "Seat-selection workflow for a flight: FlightAware aircraft check, SeatMaps cabin "
+                    "map, cross-check sites (SeatGuru, aeroLOPA, ExpertFlyer, Flightradar24) and the "
+                    "actions that actually assign the seat."
+                ),
+                "parameters": {
+                    "airline": "Operating or marketing airline",
+                    "duration_minutes": "Itinerary duration in minutes",
+                    "aircraft": "Aircraft type, e.g. Airbus A350-900 (optional)",
+                    "flight_number": "Flight number, e.g. IB 6131 (optional)",
+                    "cabin": "economy/business/first (default economy)",
+                },
+            },
         ]
 
     def call_tool(self, tool_name: str, **params) -> Dict[str, Any]:
@@ -152,6 +301,17 @@ class SkyBuddyMCPServer:
             "estimate_earnings": self.agent.estimate_earnings,
             "add_passenger": self.agent.add_passenger,
             "list_passengers": self.agent.list_passengers,
+            "prepare_booking": self.agent.prepare_booking,
+            "confirm_booking": self.agent.confirm_booking,
+            "get_booking_playbook": self.agent.get_booking_playbook,
+            "mark_booking_executed": self.agent.mark_booking_executed,
+            "cancel_booking": self.agent.cancel_booking,
+            "list_bookings": self.agent.list_bookings,
+            "record_price_observation": self.agent.record_price_observation,
+            "get_price_baseline": self.agent.get_price_baseline,
+            "evaluate_price": self.agent.evaluate_price,
+            "auto_book_if_deal": self.agent.auto_book_if_deal,
+            "get_seat_advisory": self.agent.get_seat_advisory,
         }
 
         if tool_name not in methods:

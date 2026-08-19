@@ -7,15 +7,19 @@ All agents communicate through this layer or via MCP server.
 from __future__ import annotations
 
 import json
+from dataclasses import asdict
 from typing import Any, Callable, Dict, List, Optional
 
 from alerts import get_alerts_manager
+from booking_agent import get_booking_agent
 from flight_formatter import FlightFormatter
 from flight_monitor import FlightMonitor
 from loyalty_cards import get_loyalty_manager
 from passenger_profiles import get_passenger_manager
 from preferences import get_preferences_manager
+from price_baseline import DEFAULT_LOOKBACK_DAYS, get_buy_engine, get_price_baseline
 from recommendations import get_recommendation_engine
+from seat_advisor import build_seat_advisory
 
 
 class AgentType:
@@ -43,6 +47,9 @@ class SkyBuddyAgent:
         self.loyalty = get_loyalty_manager()
         self.passengers = get_passenger_manager()
         self.recommendations = get_recommendation_engine()
+        self.booking = get_booking_agent()
+        self.baseline = get_price_baseline()
+        self.buy_engine = get_buy_engine()
         self.formatter = FlightFormatter()
 
         # Store agent-specific callbacks
@@ -358,6 +365,234 @@ class SkyBuddyAgent:
                 for p in passengers
             ],
         }
+
+    # ========== BOOKING (AGENT TRIGGER) ==========
+
+    def prepare_booking(
+        self,
+        booking_url: str,
+        airline: str,
+        origin: str,
+        destination: str,
+        outbound_date: str,
+        price: float,
+        currency: str = "EUR",
+        return_date: Optional[str] = None,
+        cabin: str = "economy",
+        passengers: Optional[List[str]] = None,
+        max_price: Optional[float] = None,
+        allow_payment: bool = False,
+        notes: str = "",
+        flight_number: str = "",
+        aircraft: str = "",
+        duration_minutes: int = 0,
+    ) -> Dict[str, Any]:
+        """Create a booking intent for a flight link. Nothing is executed yet."""
+        return self.booking.prepare_booking(
+            booking_url=booking_url,
+            airline=airline,
+            origin=origin,
+            destination=destination,
+            outbound_date=outbound_date,
+            price=price,
+            currency=currency,
+            return_date=return_date,
+            cabin=cabin,
+            passengers=passengers,
+            max_price=max_price,
+            allow_payment=allow_payment,
+            notes=notes,
+            flight_number=flight_number,
+            aircraft=aircraft,
+            duration_minutes=duration_minutes,
+        )
+
+    def prepare_booking_from_recommendation(
+        self,
+        recommendation: Dict[str, Any],
+        origin: str,
+        destination: str,
+        outbound_date: str,
+        return_date: Optional[str] = None,
+        passengers: Optional[List[str]] = None,
+        max_price: Optional[float] = None,
+        allow_payment: bool = False,
+    ) -> Dict[str, Any]:
+        """Create a booking intent straight from a `search_flights` recommendation."""
+        booking_url = recommendation.get("booking_url", "")
+        if not booking_url:
+            return {"status": "error", "error": "Recommendation has no booking_url."}
+
+        return self.prepare_booking(
+            booking_url=booking_url,
+            airline=recommendation.get("airline", "Unknown"),
+            origin=origin,
+            destination=destination,
+            outbound_date=outbound_date,
+            return_date=return_date,
+            price=float(recommendation.get("price", 0.0)),
+            currency=recommendation.get("currency", "EUR"),
+            passengers=passengers,
+            max_price=max_price,
+            allow_payment=allow_payment,
+            notes=f"Score {recommendation.get('score', 'n/a')}/100 from SkyBuddy search.",
+        )
+
+    def confirm_booking(
+        self,
+        intent_id: str,
+        approved_by: str,
+        current_price: Optional[float] = None,
+        allow_payment: Optional[bool] = None,
+    ) -> Dict[str, Any]:
+        """Approve a booking intent and release the agent playbook."""
+        return self.booking.confirm_booking(
+            intent_id=intent_id,
+            approved_by=approved_by,
+            current_price=current_price,
+            allow_payment=allow_payment,
+        )
+
+    def get_booking_playbook(self, intent_id: str) -> Dict[str, Any]:
+        """Return the step-by-step booking instructions for a confirmed intent."""
+        return self.booking.get_booking_playbook(intent_id)
+
+    def mark_booking_executed(
+        self,
+        intent_id: str,
+        confirmation_code: str = "",
+        amount_paid: Optional[float] = None,
+        success: bool = True,
+        detail: str = "",
+    ) -> Dict[str, Any]:
+        """Record the outcome of a booking the agent carried out."""
+        return self.booking.mark_executed(
+            intent_id=intent_id,
+            confirmation_code=confirmation_code,
+            amount_paid=amount_paid,
+            success=success,
+            detail=detail,
+        )
+
+    def cancel_booking(self, intent_id: str, reason: str = "") -> Dict[str, Any]:
+        """Cancel a booking intent before it is executed."""
+        return self.booking.cancel_booking(intent_id, reason)
+
+    def list_bookings(self, status: Optional[str] = None) -> Dict[str, Any]:
+        """List booking intents, optionally filtered by status."""
+        return self.booking.list_bookings(status)
+
+    # ========== HISTORICAL BASELINE & BUY SIGNAL ==========
+
+    def get_price_baseline(
+        self,
+        origin: str,
+        destination: str,
+        days: int = DEFAULT_LOOKBACK_DAYS,
+        outbound_date: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """Scan the recorded price history for a route (a year by default)."""
+        return asdict(
+            self.baseline.build(origin, destination, days=days, outbound_date=outbound_date)
+        )
+
+    def record_price_observation(
+        self,
+        origin: str,
+        destination: str,
+        price: float,
+        currency: str = "EUR",
+        outbound_date: str = "",
+        return_date: str = "",
+        airline: str = "",
+        source: str = "agent",
+        booking_url: str = "",
+    ) -> Dict[str, Any]:
+        """Record one observed price so the baseline keeps growing."""
+        return asdict(
+            self.baseline.record_price(
+                origin=origin,
+                destination=destination,
+                price=price,
+                currency=currency,
+                outbound_date=outbound_date,
+                return_date=return_date,
+                airline=airline,
+                source=source,
+                booking_url=booking_url,
+            )
+        )
+
+    def evaluate_price(
+        self,
+        origin: str,
+        destination: str,
+        price: float,
+        days: int = DEFAULT_LOOKBACK_DAYS,
+        target_price: Optional[float] = None,
+        outbound_date: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """Return a buy verdict for a live price against its historical baseline."""
+        return self.baseline.evaluate(
+            origin=origin,
+            destination=destination,
+            price=price,
+            days=days,
+            target_price=target_price,
+            outbound_date=outbound_date,
+        )
+
+    def auto_book_if_deal(
+        self,
+        origin: str,
+        destination: str,
+        outbound_date: str,
+        price: float,
+        booking_url: str,
+        airline: str = "",
+        return_date: Optional[str] = None,
+        currency: str = "EUR",
+        passengers: Optional[List[str]] = None,
+        target_price: Optional[float] = None,
+        max_price: Optional[float] = None,
+        days: int = DEFAULT_LOOKBACK_DAYS,
+        cabin: str = "economy",
+    ) -> Dict[str, Any]:
+        """Create the booking intent automatically when the price beats its history."""
+        return self.buy_engine.auto_book_if_deal(
+            origin=origin,
+            destination=destination,
+            outbound_date=outbound_date,
+            price=price,
+            booking_url=booking_url,
+            airline=airline,
+            return_date=return_date,
+            currency=currency,
+            passengers=passengers,
+            target_price=target_price,
+            max_price=max_price,
+            days=days,
+            cabin=cabin,
+        )
+
+    # ========== SEAT SELECTION ==========
+
+    def get_seat_advisory(
+        self,
+        airline: str,
+        duration_minutes: int,
+        aircraft: str = "",
+        flight_number: str = "",
+        cabin: str = "economy",
+    ) -> Dict[str, Any]:
+        """Return the seat-map workflow, cross-check sites and selection actions."""
+        return build_seat_advisory(
+            airline=airline,
+            duration_minutes=duration_minutes,
+            aircraft=aircraft,
+            flight_number=flight_number,
+            cabin=cabin,
+        )
 
     # ========== HELPER METHODS ==========
 

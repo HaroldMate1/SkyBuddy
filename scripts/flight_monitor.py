@@ -8,6 +8,7 @@ from pathlib import Path
 from alerts import AlertsManager, PriceAlert, get_alerts_manager
 from duffel_client import DuffelClient, get_duffel_client
 from preferences import PreferencesManager, get_preferences_manager
+from price_baseline import PriceBaseline, get_price_baseline
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -20,11 +21,13 @@ class FlightMonitor:
         duffel_client: DuffelClient | None = None,
         preferences_manager: PreferencesManager | None = None,
         alerts_manager: AlertsManager | None = None,
+        price_baseline: PriceBaseline | None = None,
     ):
         """Initialize flight monitor."""
         self.duffel = duffel_client or get_duffel_client()
         self.prefs = preferences_manager or get_preferences_manager()
         self.alerts = alerts_manager or get_alerts_manager()
+        self.baseline = price_baseline or get_price_baseline()
 
     def monitor_all_routes(self) -> dict[str, list[PriceAlert]]:
         """Monitor all watched routes and return alerts triggered."""
@@ -60,8 +63,20 @@ class FlightMonitor:
         current_price = best_flight.price
         currency = best_flight.currency
 
-        # Update history
+        # Update history — both the route's own log and the long-term baseline,
+        # so every check makes tomorrow's buy decision better informed.
         self.prefs.update_price_history(route_name, current_price)
+        self.baseline.record_price(
+            origin=route.origin,
+            destination=route.destination,
+            price=current_price,
+            currency=currency,
+            outbound_date=route.outbound_date,
+            return_date=route.return_date or "",
+            airline=best_flight.airline,
+            source="monitor",
+            booking_url=best_flight.booking_url,
+        )
 
         # Check if should alert
         alerts_triggered = []

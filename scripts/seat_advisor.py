@@ -67,6 +67,116 @@ def seat_map_sources(airline: str, aircraft: str = "", flight_number: str = "", 
     ]
 
 
+def seatguru_url() -> str:
+    """Return the SeatGuru entry point for annotated seat maps."""
+    return "https://www.seatguru.com/"
+
+
+def aerolopa_url() -> str:
+    """Return the aeroLOPA entry point for airline-specific cabin diagrams."""
+    return "https://www.aerolopa.com/"
+
+
+def expertflyer_url() -> str:
+    """Return the ExpertFlyer entry point for seat-availability alerts."""
+    return "https://www.expertflyer.com/"
+
+
+def flightradar24_url(flight_number: str = "") -> str:
+    """Return a Flightradar24 link for the flight, or its data home page."""
+    slug = _flightaware_slug(flight_number).lower()
+    if slug:
+        return f"https://www.flightradar24.com/data/flights/{slug}"
+    return "https://www.flightradar24.com/data/flights"
+
+
+def cross_check_sources(airline: str, aircraft: str = "", flight_number: str = "", cabin: str = "") -> list[dict[str, str]]:
+    """Return the secondary seat-research websites, with the query to run on each.
+
+    These complement — never replace — the FlightAware → SeatMaps workflow. Each
+    entry carries the site entry point and the exact search string to type there,
+    so an agent never has to guess a URL scheme that may have changed.
+    """
+    airline = _clean(airline)
+    aircraft = _clean(aircraft)
+    cabin = _clean(cabin) or "economy"
+    flight_number = _clean(flight_number)
+
+    return [
+        {
+            "name": "SeatGuru",
+            "url": seatguru_url(),
+            "query": " ".join(part for part in (airline, aircraft, "seat map") if part),
+            "role": "cross-check",
+            "why": "Colour-coded good/bad seat annotations and traveller notes per aircraft version.",
+        },
+        {
+            "name": "aeroLOPA",
+            "url": aerolopa_url(),
+            "query": " ".join(part for part in (airline, aircraft) if part),
+            "role": "cross-check",
+            "why": "High-accuracy, airline-specific cabin diagrams drawn from real layout-of-passenger-accommodation data.",
+        },
+        {
+            "name": "ExpertFlyer",
+            "url": expertflyer_url(),
+            "query": " ".join(part for part in (flight_number or airline, aircraft, cabin) if part),
+            "role": "availability",
+            "why": "Live seat availability and alerts when a preferred seat opens up before departure.",
+        },
+        {
+            "name": "Flightradar24",
+            "url": flightradar24_url(flight_number),
+            "query": flight_number or airline,
+            "role": "verify",
+            "why": "Second source for the registration and aircraft actually flying the route in recent days.",
+        },
+        {
+            "name": "Airline seat selection",
+            "url": "",
+            "query": f"{airline} manage my booking seat selection".strip(),
+            "role": "act",
+            "why": "The only place the seat is actually assigned — apply the choice validated on the maps above.",
+        },
+    ]
+
+
+def seat_selection_actions(cabin: str = "economy") -> list[dict[str, str]]:
+    """Return the practical steps that turn seat research into an assigned seat."""
+    cabin = _clean(cabin).lower() or "economy"
+    actions = [
+        {
+            "when": "at_booking",
+            "action": "Check whether seat selection is included in the fare before paying for it separately.",
+            "note": "Basic/light fares often charge; some cards, status tiers or corporate fares waive the fee.",
+        },
+        {
+            "when": "at_booking",
+            "action": "Apply the seat validated on the cabin map through the airline's own seat-selection page.",
+            "note": "Confirm the seat number appears on the itinerary before leaving the booking flow.",
+        },
+        {
+            "when": "after_booking",
+            "action": "Re-check the seat map a few days before departure for aircraft swaps.",
+            "note": "A swap silently reassigns seats; the same number can be a different position on the new layout.",
+        },
+        {
+            "when": "check_in",
+            "action": "Re-open the map at the 24-48h check-in window when blocked seats are released.",
+            "note": "Exit rows and bulkheads frequently free up at check-in at no cost.",
+        },
+    ]
+    if "business" in cabin or "first" in cabin:
+        actions.append(
+            {
+                "when": "at_booking",
+                "action": "Verify direct aisle access, seat direction and privacy doors for the exact cabin version.",
+                "note": "Premium cabins vary the most between sub-fleets of the same aircraft model.",
+            }
+        )
+    return actions
+
+
 def workflow_steps(airline: str, aircraft: str = "", flight_number: str = "", cabin: str = "") -> list[dict[str, str]]:
     return [
         {
@@ -126,9 +236,11 @@ def build_seat_advisory(
             "configuration_warning": "Still verify unusual aircraft swaps or tight personal preferences before paying for a seat.",
             "workflow_steps": [],
             "seat_map_sources": [],
+            "cross_check_sources": [],
             "flightaware_query": "",
             "seatmaps_query": "",
             "selection_tips": [],
+            "seat_selection_actions": seat_selection_actions(cabin),
         }
 
     if aircraft:
@@ -149,9 +261,11 @@ def build_seat_advisory(
         "configuration_warning": warning,
         "workflow_steps": workflow_steps(airline, aircraft, flight_number, cabin),
         "seat_map_sources": seat_map_sources(airline, aircraft, flight_number, cabin),
+        "cross_check_sources": cross_check_sources(airline, aircraft, flight_number, cabin),
         "flightaware_query": flightaware_query(airline, flight_number),
         "seatmaps_query": seatmaps_query(airline, aircraft, cabin),
         "selection_tips": selection_tips(cabin),
+        "seat_selection_actions": seat_selection_actions(cabin),
     }
 
 

@@ -212,6 +212,64 @@ sky.add_passenger(
 
 Get all passenger profiles.
 
+### Historical Baseline & Buy Signal
+
+**`get_price_baseline(origin, destination, days=365, outbound_date=None)`**
+
+Scan every recorded price for the route over the lookback window (a full year by default) and return
+min, p10/p25/median/p75, mean, trend, days covered and a confidence label.
+
+**`evaluate_price(origin, destination, price, days=365, target_price=None, outbound_date=None)`**
+
+Turn a live fare into a verdict: `buy_now`, `good`, `fair`, `wait` or `high`, with its percentile,
+distance from the median, and written reasons.
+
+**`record_price_observation(origin, destination, price, ...)`**
+
+Add one observation to the baseline store. `flight_monitor.py` does this automatically on every check.
+
+**`auto_book_if_deal(origin, destination, outbound_date, price, booking_url, ...)`**
+
+Evaluate the offer against its own history and, when the verdict is buy-worthy, create the booking
+intent for that link. The intent still requires human confirmation.
+
+### Booking (the purchase trigger)
+
+**`prepare_booking(booking_url, airline, origin, destination, outbound_date, price, ...)`**
+
+Create a booking intent. Executes nothing — status starts at `awaiting_confirmation`. Pass
+`max_price` for a hard ceiling, `passengers` for stored profiles, and `flight_number` / `aircraft` /
+`duration_minutes` to get the long-haul seat check inside the playbook.
+
+**`prepare_booking_from_recommendation(recommendation, origin, destination, ...)`**
+
+Same thing, straight from an entry of `search_flights()["top_recommendations"]`.
+
+**`confirm_booking(intent_id, approved_by, current_price=None, allow_payment=None)`**
+
+Human approval. Re-validates the live price against the ceiling and refuses on breach. Returns the
+agent playbook.
+
+**`get_booking_playbook(intent_id)`**
+
+The ordered steps to execute on the booking link, the abort conditions, and the seat advisory.
+
+**`mark_booking_executed(intent_id, confirmation_code, amount_paid, success=True)`** ·
+**`cancel_booking(intent_id, reason)`** · **`list_bookings(status=None)`**
+
+Close the loop and read the audit trail.
+
+> Claude must never enter payment details. Without `allow_payment` the playbook ends at
+> `stop_before_payment` and control returns to the human.
+
+### Seat Selection
+
+**`get_seat_advisory(airline, duration_minutes, aircraft="", flight_number="", cabin="economy")`**
+
+FlightAware → SeatMaps workflow for itineraries over 8 hours, cross-check links for SeatGuru,
+aeroLOPA, ExpertFlyer and Flightradar24 (each with the query to run there), selection tips, and the
+actions that actually assign the seat at booking and at check-in.
+
 ## Workflows
 
 ### Find Cheap Flights

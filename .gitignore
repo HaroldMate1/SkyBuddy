@@ -55,6 +55,8 @@ data/google_flights_latest.json
 data/fare_history.csv
 data/airline_history.csv
 data/alert_state.json
+data/bookings.json
+data/price_baseline.csv
 reports/
 
 # Logs

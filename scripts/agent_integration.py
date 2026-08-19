@@ -10,16 +10,23 @@ import json
 from dataclasses import asdict
 from typing import Any, Callable, Dict, List, Optional
 
-from alerts import get_alerts_manager
-from booking_agent import get_booking_agent
+from alerts import AlertsManager
+from booking_agent import BookingAgent
 from flight_formatter import FlightFormatter
 from flight_monitor import FlightMonitor
-from loyalty_cards import get_loyalty_manager
-from passenger_profiles import get_passenger_manager
-from preferences import get_preferences_manager
-from price_baseline import DEFAULT_LOOKBACK_DAYS, get_buy_engine, get_price_baseline
-from recommendations import get_recommendation_engine
+from loyalty_cards import LoyaltyManager
+from passenger_profiles import PassengerManager
+from preferences import PreferencesManager
+from price_baseline import (
+    DEFAULT_LOOKBACK_DAYS,
+    BuyDecisionEngine,
+    PriceBaseline,
+    price_range,
+    verdict_for,
+)
+from recommendations import RecommendationEngine
 from seat_advisor import build_seat_advisory
+from users import UserManager, Workspace
 
 
 class AgentType:
@@ -34,27 +41,104 @@ class AgentType:
 class SkyBuddyAgent:
     """Universal SkyBuddy integration for any agent."""
 
-    def __init__(self, agent_type: str = AgentType.GENERIC):
+    def __init__(self, agent_type: str = AgentType.GENERIC, user: Optional[str] = None):
         """Initialize SkyBuddy agent integration.
 
         Args:
             agent_type: Type of agent (hermes, openclaw, claude, generic)
+            user: Traveller whose workspace to use. Defaults to the active one.
         """
         self.agent_type = agent_type
-        self.monitor = FlightMonitor()
-        self.prefs = get_preferences_manager()
-        self.alerts = get_alerts_manager()
-        self.loyalty = get_loyalty_manager()
-        self.passengers = get_passenger_manager()
-        self.recommendations = get_recommendation_engine()
-        self.booking = get_booking_agent()
-        self.baseline = get_price_baseline()
-        self.buy_engine = get_buy_engine()
+        self.users = UserManager()
         self.formatter = FlightFormatter()
 
         # Store agent-specific callbacks
         self.callbacks: Dict[str, Callable] = {}
+        self._bind_workspace(self.users.workspace(user))
         self._setup_agent_specific()
+
+    # ========== WORKSPACES (MULTI-USER) ==========
+
+    def _bind_workspace(self, workspace: Workspace) -> None:
+        """Point every manager at one traveller's files."""
+        self.workspace = workspace
+        self.user_id = workspace.user_id
+
+        self.prefs = PreferencesManager(prefs_file=workspace.preferences_file)
+        self.alerts = AlertsManager(alerts_file=workspace.alerts_file)
+        self.loyalty = LoyaltyManager(cards_file=workspace.cards_file)
+        self.passengers = PassengerManager(profiles_file=workspace.passengers_file)
+        self.recommendations = RecommendationEngine(preferences=self.prefs)
+        self.booking = BookingAgent(bookings_file=workspace.bookings_file)
+        self.baseline = PriceBaseline(
+            baseline_file=workspace.baseline_file,
+            observations_file=workspace.observations_file,
+        )
+        self.buy_engine = BuyDecisionEngine(self.baseline)
+        self.buy_engine.booking = self.booking
+        self.booking.passengers = self.passengers
+        self.monitor = FlightMonitor(
+            preferences_manager=self.prefs,
+            alerts_manager=self.alerts,
+            price_baseline=self.baseline,
+        )
+
+    def use_user(self, user: str) -> Dict[str, Any]:
+        """Switch this agent to another traveller's workspace, without persisting."""
+        self._bind_workspace(self.users.workspace(user))
+        return {"status": "using", "user_id": self.user_id, "workspace": self.workspace.as_dict()}
+
+    def create_user(
+        self,
+        user: str,
+        display_name: str = "",
+        email: str = "",
+        home_airport: str = "",
+        currency: str = "EUR",
+        notes: str = "",
+        make_active: bool = True,
+    ) -> Dict[str, Any]:
+        """Create a traveller workspace and optionally switch to it."""
+        result = self.users.create_user(
+            user=user,
+            display_name=display_name,
+            email=email,
+            home_airport=home_airport,
+            currency=currency,
+            notes=notes,
+            make_active=make_active,
+        )
+        if result.get("status") == "created" and make_active:
+            self._bind_workspace(self.users.workspace())
+        return result
+
+    def list_users(self) -> Dict[str, Any]:
+        """List every traveller workspace."""
+        return self.users.list_users()
+
+    def get_current_user(self) -> Dict[str, Any]:
+        """Describe the traveller this agent is working for."""
+        current = self.users.current()
+        current["bound_user"] = self.user_id
+        return current
+
+    def switch_user(self, user: str) -> Dict[str, Any]:
+        """Make a traveller active and bind this agent to their workspace."""
+        result = self.users.switch_user(user)
+        if result.get("status") == "switched":
+            self._bind_workspace(self.users.workspace())
+        return result
+
+    def update_user(self, user: str, **fields: Any) -> Dict[str, Any]:
+        """Update a traveller profile."""
+        return self.users.update_user(user, **fields)
+
+    def delete_user(self, user: str, remove_data: bool = False) -> Dict[str, Any]:
+        """Delete a traveller, optionally removing their stored files."""
+        result = self.users.delete_user(user, remove_data=remove_data)
+        if result.get("status") == "deleted" and self.user_id == user.strip().lower():
+            self._bind_workspace(self.users.workspace())
+        return result
 
     def _setup_agent_specific(self) -> None:
         """Setup agent-specific behavior."""
@@ -124,10 +208,23 @@ class SkyBuddyAgent:
             for f in sorted(result.flights, key=lambda f: f.price)[:15]
         ]
 
+        # Where does each fare sit inside the recorded history for this route?
+        history = self.baseline.build(origin, destination, outbound_date=outbound_date)
+        for flight in flights_data:
+            flight["verdict"] = verdict_for(flight["price"], history)
+            flight["vs_median_percent"] = (
+                round((flight["price"] - history.median) / history.median * 100, 1)
+                if history.median
+                else None
+            )
+
+        verdicts = {flight["booking_url"]: flight["verdict"] for flight in flights_data}
+
         # Get recommendations
         recs = self.recommendations.recommend_flights(
             flights_data,
-            price_median=sum(f["price"] for f in flights_data) / len(flights_data),
+            price_median=history.median
+            or sum(f["price"] for f in flights_data) / len(flights_data),
         )
 
         return {
@@ -139,6 +236,7 @@ class SkyBuddyAgent:
             "flights_found": len(result.flights),
             "best_price": min(f["price"] for f in flights_data),
             "currency": flights_data[0]["currency"],
+            "price_history": price_range(history),
             "flights": flights_data[:5],
             "top_recommendations": [
                 {
@@ -151,6 +249,12 @@ class SkyBuddyAgent:
                     "stops": rec.stops,
                     "reasons": rec.reasons,
                     "booking_url": rec.booking_url,
+                    "verdict": verdicts.get(rec.booking_url),
+                    "history": {
+                        "lowest": history.minimum,
+                        "median": history.median,
+                        "highest": history.maximum,
+                    },
                 }
                 for i, rec in enumerate(recs[:3])
             ],
@@ -610,6 +714,8 @@ class SkyBuddyAgent:
         return json.dumps(data, indent=2, default=str)
 
 
-def create_agent(agent_type: str = AgentType.GENERIC) -> SkyBuddyAgent:
-    """Factory function to create agent."""
-    return SkyBuddyAgent(agent_type=agent_type)
+def create_agent(
+    agent_type: str = AgentType.GENERIC, user: Optional[str] = None
+) -> SkyBuddyAgent:
+    """Factory function to create an agent bound to a traveller workspace."""
+    return SkyBuddyAgent(agent_type=agent_type, user=user)

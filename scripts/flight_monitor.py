@@ -227,28 +227,25 @@ class FlightMonitor:
 
 
 def main() -> None:
-    """Example usage of flight monitor."""
-    monitor = FlightMonitor()
+    """Run monitoring for one traveller workspace."""
+    import argparse
 
-    # Example: Search and add route
-    result = monitor.search_and_add_route(
-        name="Colombia Trip",
-        origin="BIO",
-        destination="BOG",
-        outbound_date="2026-12-04",
-        return_date="2027-01-08",
-        target_price=650.0,
+    from users import get_workspace
+
+    parser = argparse.ArgumentParser(description="SkyBuddy route monitoring")
+    parser.add_argument("--user", help="Traveller workspace to monitor (default: the active one)")
+    args = parser.parse_args()
+
+    workspace = get_workspace(args.user)
+    monitor = FlightMonitor(
+        preferences_manager=PreferencesManager(prefs_file=workspace.preferences_file),
+        alerts_manager=AlertsManager(alerts_file=workspace.alerts_file),
+        price_baseline=PriceBaseline(
+            baseline_file=workspace.baseline_file,
+            observations_file=workspace.observations_file,
+        ),
     )
-
-    print("\nSearch Result:")
-    print(result)
-
-    # Print stats
-    stats = monitor.get_route_stats("Colombia Trip")
-    print("\nRoute Stats:")
-    print(stats)
-
-    # Print monitoring report
+    print(f"\nWorkspace: {workspace.user_id}")
     monitor.print_monitoring_report()
 
 

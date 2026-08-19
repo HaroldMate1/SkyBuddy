@@ -40,7 +40,8 @@ from pathlib import Path
 from typing import Any, Iterable, Optional
 
 from booking_agent import get_booking_agent
-from preferences import get_preferences_manager
+from preferences import PreferencesManager, get_preferences_manager
+from users import get_workspace
 
 ROOT = Path(__file__).resolve().parents[1]
 BASELINE_FILE = ROOT / "data" / "price_baseline.csv"
@@ -97,6 +98,44 @@ def _parse_when(value: str) -> Optional[datetime]:
         return datetime.strptime(text[:10], "%Y-%m-%d").replace(tzinfo=timezone.utc)
     except ValueError:
         return None
+
+
+def verdict_for(
+    price: float, baseline: "Baseline", target_price: Optional[float] = None
+) -> str:
+    """Classify a price against an already-built baseline.
+
+    Shared by :meth:`PriceBaseline.evaluate` and by any caller that has the
+    baseline in hand already and does not want to re-scan the history.
+    """
+    if target_price is not None and price <= target_price:
+        return VERDICT_BUY
+    if baseline.buy_threshold is not None and price <= baseline.buy_threshold:
+        return VERDICT_BUY
+    if baseline.good_threshold is not None and price <= baseline.good_threshold:
+        return VERDICT_GOOD
+    if baseline.median is not None and price <= baseline.median:
+        return VERDICT_FAIR
+    if baseline.p75 is not None and price <= baseline.p75:
+        return VERDICT_WAIT
+    return VERDICT_HIGH
+
+
+def price_range(baseline: "Baseline") -> dict[str, Any]:
+    """Return the lowest, median and highest price recorded in the window."""
+    return {
+        "days": baseline.days,
+        "samples": baseline.samples,
+        "currency": baseline.currency,
+        "lowest": baseline.minimum,
+        "median": baseline.median,
+        "highest": baseline.maximum,
+        "p10": baseline.p10,
+        "p25": baseline.p25,
+        "p75": baseline.p75,
+        "trend": baseline.trend,
+        "confidence": baseline.confidence,
+    }
 
 
 def _percentile(values: list[float], fraction: float) -> float:
@@ -165,10 +204,12 @@ class PriceBaseline:
         self,
         baseline_file: Path = BASELINE_FILE,
         observations_file: Path = OBSERVATIONS_FILE,
+        preferences: Optional[PreferencesManager] = None,
     ):
         """Initialise the scanner over the local price stores."""
         self.baseline_file = baseline_file
         self.observations_file = observations_file
+        self.preferences = preferences
 
     # ---------- recording ----------
 
@@ -278,12 +319,12 @@ class PriceBaseline:
                 )
         return rows
 
-    @staticmethod
-    def _from_watched_routes() -> list[PriceObservation]:
+    def _from_watched_routes(self) -> list[PriceObservation]:
         """Read the price history stored on watched routes."""
         rows: list[PriceObservation] = []
         try:
-            routes = get_preferences_manager().get_all_watched_routes()
+            manager = self.preferences or get_preferences_manager()
+            routes = manager.get_all_watched_routes()
         except Exception:  # pragma: no cover - defensive
             return rows
 
@@ -461,6 +502,9 @@ class PriceBaseline:
                 "verdict": verdict,
                 "price": price,
                 "currency": baseline.currency,
+                "lowest": None,
+                "median": None,
+                "highest": None,
                 "percentile": None,
                 "vs_median_percent": None,
                 "should_book": verdict in BUY_WORTHY,
@@ -474,35 +518,32 @@ class PriceBaseline:
         percentile = round(below / len(history) * 100, 1)
         vs_median = round((price - baseline.median) / baseline.median * 100, 1)
 
+        verdict = verdict_for(price, baseline, target_price)
+
         if target_price is not None and price <= target_price:
-            verdict = VERDICT_BUY
             reasons.append(f"At or below your target of {target_price} {baseline.currency}.")
-        elif baseline.buy_threshold is not None and price <= baseline.buy_threshold:
-            verdict = VERDICT_BUY
+        elif verdict == VERDICT_BUY:
             reasons.append(
                 f"In the cheapest 10% of the last {baseline.days} days "
                 f"(≤ {baseline.buy_threshold} {baseline.currency})."
             )
-        elif baseline.good_threshold is not None and price <= baseline.good_threshold:
-            verdict = VERDICT_GOOD
+        elif verdict == VERDICT_GOOD:
             reasons.append(
                 f"In the cheapest 25% of the last {baseline.days} days "
                 f"(≤ {baseline.good_threshold} {baseline.currency})."
             )
-        elif price <= baseline.median:
-            verdict = VERDICT_FAIR
+        elif verdict == VERDICT_FAIR:
             reasons.append("At or below the historical median, but not a standout deal.")
-        elif baseline.p75 is not None and price <= baseline.p75:
-            verdict = VERDICT_WAIT
+        elif verdict == VERDICT_WAIT:
             reasons.append("Above the median — history says a better fare is likely.")
         else:
-            verdict = VERDICT_HIGH
             reasons.append("In the most expensive quarter of the observed year.")
 
         if baseline.minimum is not None:
             reasons.append(
-                f"Cheapest ever recorded: {baseline.minimum} {baseline.currency}; "
-                f"median {baseline.median} {baseline.currency}."
+                f"Recorded range: lowest {baseline.minimum} {baseline.currency}, "
+                f"median {baseline.median} {baseline.currency}, "
+                f"highest {baseline.maximum} {baseline.currency}."
             )
         if baseline.trend == "falling":
             reasons.append(f"Recent trend is falling ({baseline.trend_percent}% vs earlier).")
@@ -520,6 +561,9 @@ class PriceBaseline:
             "verdict": verdict,
             "price": price,
             "currency": baseline.currency,
+            "lowest": baseline.minimum,
+            "median": baseline.median,
+            "highest": baseline.maximum,
             "percentile": percentile,
             "vs_median_percent": vs_median,
             "should_book": verdict in BUY_WORTHY,
@@ -625,14 +669,21 @@ class BuyDecisionEngine:
         }
 
 
-def get_price_baseline() -> PriceBaseline:
-    """Return a ready-to-use price baseline scanner."""
-    return PriceBaseline()
+def get_price_baseline(user: Optional[str] = None) -> PriceBaseline:
+    """Return a price baseline scanner bound to a traveller workspace."""
+    workspace = get_workspace(user)
+    return PriceBaseline(
+        baseline_file=workspace.baseline_file,
+        observations_file=workspace.observations_file,
+        preferences=PreferencesManager(prefs_file=workspace.preferences_file),
+    )
 
 
-def get_buy_engine() -> BuyDecisionEngine:
-    """Return a ready-to-use buy-decision engine."""
-    return BuyDecisionEngine()
+def get_buy_engine(user: Optional[str] = None) -> BuyDecisionEngine:
+    """Return a buy-decision engine bound to a traveller workspace."""
+    engine = BuyDecisionEngine(get_price_baseline(user))
+    engine.booking = get_booking_agent(user)
+    return engine
 
 
 # ---------- CLI ----------
@@ -646,6 +697,7 @@ def build_parser() -> argparse.ArgumentParser:
     sub = parser.add_subparsers(dest="command", required=True)
 
     def route_args(target: argparse.ArgumentParser) -> None:
+        target.add_argument("--user", help="Traveller workspace (default: the active one)")
         target.add_argument("--origin", required=True)
         target.add_argument("--destination", required=True)
         target.add_argument(
@@ -693,7 +745,7 @@ def build_parser() -> argparse.ArgumentParser:
 def main() -> int:
     """Run the baseline CLI."""
     args = build_parser().parse_args()
-    scanner = PriceBaseline()
+    scanner = get_price_baseline(getattr(args, "user", None))
 
     if args.command == "scan":
         result = asdict(
@@ -725,7 +777,9 @@ def main() -> int:
             outbound_date=args.outbound_date,
         )
     else:
-        result = BuyDecisionEngine(scanner).auto_book_if_deal(
+        engine = BuyDecisionEngine(scanner)
+        engine.booking = get_booking_agent(getattr(args, "user", None))
+        result = engine.auto_book_if_deal(
             origin=args.origin,
             destination=args.destination,
             outbound_date=args.outbound_date or "",

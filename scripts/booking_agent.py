@@ -34,8 +34,9 @@ from pathlib import Path
 from typing import Any, Optional
 from urllib.parse import urlparse
 
-from passenger_profiles import get_passenger_manager
+from passenger_profiles import PassengerManager, get_passenger_manager
 from seat_advisor import build_seat_advisory
+from users import get_workspace
 
 ROOT = Path(__file__).resolve().parents[1]
 BOOKINGS_FILE = ROOT / "data" / "bookings.json"
@@ -108,10 +109,14 @@ class BookingIntent:
 class BookingAgent:
     """Create, confirm and hand out booking intents for any agent."""
 
-    def __init__(self, bookings_file: Path = BOOKINGS_FILE):
+    def __init__(
+        self,
+        bookings_file: Path = BOOKINGS_FILE,
+        passengers: Optional[PassengerManager] = None,
+    ):
         """Initialise the booking agent and load stored intents."""
         self.bookings_file = bookings_file
-        self.passengers = get_passenger_manager()
+        self.passengers = passengers or get_passenger_manager()
         self.intents: dict[str, BookingIntent] = self._load()
 
     # ---------- persistence ----------
@@ -548,9 +553,13 @@ class BookingAgent:
         return {"status": intent.status, "intent": asdict(intent)}
 
 
-def get_booking_agent() -> BookingAgent:
-    """Return a ready-to-use booking agent."""
-    return BookingAgent()
+def get_booking_agent(user: Optional[str] = None) -> BookingAgent:
+    """Return a booking agent bound to a traveller workspace."""
+    workspace = get_workspace(user)
+    return BookingAgent(
+        bookings_file=workspace.bookings_file,
+        passengers=PassengerManager(profiles_file=workspace.passengers_file),
+    )
 
 
 # ---------- CLI ----------
@@ -559,9 +568,13 @@ def get_booking_agent() -> BookingAgent:
 def build_parser() -> argparse.ArgumentParser:
     """Build the command-line parser."""
     parser = argparse.ArgumentParser(description="SkyBuddy agent booking trigger")
+    common = argparse.ArgumentParser(add_help=False)
+    common.add_argument("--user", help="Traveller workspace to use (default: the active one)")
     sub = parser.add_subparsers(dest="command", required=True)
 
-    prepare = sub.add_parser("prepare", help="Create a booking intent from a flight link")
+    prepare = sub.add_parser(
+        "prepare", parents=[common], help="Create a booking intent from a flight link"
+    )
     prepare.add_argument("--booking-url", required=True)
     prepare.add_argument("--airline", required=True)
     prepare.add_argument("--origin", required=True)
@@ -588,30 +601,30 @@ def build_parser() -> argparse.ArgumentParser:
         help="Itinerary duration; over 480 adds the long-haul seat workflow to the playbook",
     )
 
-    confirm = sub.add_parser("confirm", help="Approve an intent and release the playbook")
+    confirm = sub.add_parser("confirm", parents=[common], help="Approve an intent and release the playbook")
     confirm.add_argument("--intent-id", required=True)
     confirm.add_argument("--approved-by", required=True)
     confirm.add_argument("--current-price", type=float)
     confirm.add_argument("--allow-payment", dest="allow_payment", action="store_true", default=None)
 
-    playbook = sub.add_parser("playbook", help="Print the agent playbook for a confirmed intent")
+    playbook = sub.add_parser("playbook", parents=[common], help="Print the agent playbook for a confirmed intent")
     playbook.add_argument("--intent-id", required=True)
 
-    executed = sub.add_parser("executed", help="Record the outcome of a booking")
+    executed = sub.add_parser("executed", parents=[common], help="Record the outcome of a booking")
     executed.add_argument("--intent-id", required=True)
     executed.add_argument("--confirmation-code", default="")
     executed.add_argument("--amount-paid", type=float)
     executed.add_argument("--failed", action="store_true")
     executed.add_argument("--detail", default="")
 
-    cancel = sub.add_parser("cancel", help="Cancel an intent before execution")
+    cancel = sub.add_parser("cancel", parents=[common], help="Cancel an intent before execution")
     cancel.add_argument("--intent-id", required=True)
     cancel.add_argument("--reason", default="")
 
-    listing = sub.add_parser("list", help="List stored booking intents")
+    listing = sub.add_parser("list", parents=[common], help="List stored booking intents")
     listing.add_argument("--status")
 
-    show = sub.add_parser("show", help="Show a single intent")
+    show = sub.add_parser("show", parents=[common], help="Show a single intent")
     show.add_argument("--intent-id", required=True)
 
     return parser
@@ -620,7 +633,7 @@ def build_parser() -> argparse.ArgumentParser:
 def main() -> int:
     """Run the booking CLI."""
     args = build_parser().parse_args()
-    agent = BookingAgent()
+    agent = get_booking_agent(getattr(args, "user", None))
 
     if args.command == "prepare":
         result = agent.prepare_booking(

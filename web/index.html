@@ -4,100 +4,127 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>SkyBuddy — AI-Powered Flight Tracking for Any Agent</title>
-<meta name="description" content="SkyBuddy tracks flight prices, scores options with an AI recommendation engine, and hands any MCP-compatible agent a ready-to-execute booking intent for the exact flight link.">
+<meta name="description" content="SkyBuddy tracks flight prices against a year of history, scores every option, and hands any MCP agent an auditable booking intent for the exact flight link. Multi-user travel profiles included.">
 <meta property="og:title" content="SkyBuddy — AI-Powered Flight Tracking for Any Agent">
-<meta property="og:description" content="Flight search, price monitoring, smart alerts, seat advisory and agent-triggered booking. Works with Claude, Hermes, OpenClaw or any MCP client.">
+<meta property="og:description" content="Search, monitor, score and book flights from any agent. 365-day price baselines, buy/wait verdicts, seat intelligence, per-user travel workspaces and agent-executable booking intents.">
 <meta property="og:type" content="website">
 <meta property="og:image" content="/logo.jpg">
-<meta name="theme-color" content="#060913">
-<link rel="icon" href="/logo.jpg">
+<meta name="theme-color" content="#0d1b2a">
+<link rel="icon" type="image/svg+xml" href="/logo.svg">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@500;600;700;800&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/styles.css">
 </head>
 <body>
-<div class="aurora"></div>
-<div class="grid-lines"></div>
+
+<!-- ambient environment -->
+<div class="env" aria-hidden="true">
+  <div class="env__sky"></div>
+  <div class="env__floor"></div>
+  <div class="env__grid"></div>
+</div>
+<div class="clouds" id="clouds" aria-hidden="true"></div>
 
 <header class="nav">
   <div class="wrap nav-inner">
-    <a class="brand" href="#top"><img src="/logo.jpg" alt="SkyBuddy logo"> SkyBuddy</a>
+    <a class="brand" href="#top"><img src="/logo.svg" alt="" width="38" height="29"> SkyBuddy</a>
     <nav class="nav-links">
+      <a href="#dashboard">Dashboard</a>
       <a href="#features">Features</a>
       <a href="#booking">Agent booking</a>
       <a href="#quickstart">Quick start</a>
       <a href="#tools">MCP tools</a>
-      <a class="btn btn-sm" href="https://github.com/HaroldMate1/SkyBuddy" target="_blank" rel="noopener">GitHub</a>
+      <a class="btn btn--sm btn--primary" href="https://github.com/HaroldMate1/SkyBuddy" target="_blank" rel="noopener">GitHub</a>
     </nav>
   </div>
 </header>
 
 <main id="top">
 
-<!-- ================= HERO ================= -->
-<section class="hero">
-  <div class="wrap hero-grid">
-    <div>
-      <p class="eyebrow">Open source · Python · MCP</p>
-      <h1>Flight tracking your <span class="grad">agent can actually act on</span>.</h1>
-      <p class="lede">
-        SkyBuddy searches routes, watches prices around the clock and compares every fare against
-        a full year of its own history — then hands your agent an auditable booking intent so it can
-        open the exact flight link and take the purchase to the final human OK.
-      </p>
-      <div class="hero-cta">
-        <a class="btn btn-primary" href="https://github.com/HaroldMate1/SkyBuddy" target="_blank" rel="noopener">
-          ★ Star on GitHub
-        </a>
-        <a class="btn" href="#quickstart">Quick start</a>
-        <a class="btn" href="#booking">See agent booking</a>
-      </div>
-      <div class="badges">
-        <span class="badge" id="stat-stars">★ — stars</span>
-        <span class="badge" id="stat-forks">⑂ — forks</span>
-        <span class="badge">MIT-friendly · open source</span>
-        <span class="badge">Python 3.10+</span>
-      </div>
+<!-- ================= HERO + SEARCH DASHBOARD ================= -->
+<section class="hero" id="dashboard">
+  <div class="wrap">
+    <p class="eyebrow reveal reveal--1">Open source · Python · MCP</p>
+    <h1 class="reveal reveal--2">Flight tracking your<br><span class="grad">agent can act on</span></h1>
+    <p class="lede reveal reveal--3">
+      SkyBuddy watches routes around the clock, measures every fare against a full year of its own
+      history, and hands your agent an auditable booking intent for the exact flight link —
+      with a separate travel workspace for every traveller.
+    </p>
+    <div class="hero-cta reveal reveal--4">
+      <a class="btn btn--primary" href="https://github.com/HaroldMate1/SkyBuddy" target="_blank" rel="noopener">★ Star on GitHub</a>
+      <a class="btn btn--ghost" href="#booking">See agent booking</a>
+    </div>
+    <div class="pills reveal reveal--4">
+      <span class="pill" id="stat-stars">★ — stars</span>
+      <span class="pill" id="stat-forks">⑂ — forks</span>
+      <span class="pill">30 agent tools</span>
+      <span class="pill">Multi-user</span>
     </div>
 
-    <div class="terminal">
-      <div class="terminal-bar">
-        <span class="dot r"></span><span class="dot y"></span><span class="dot g"></span>
-        <span class="terminal-title">skybuddy — agent session</span>
+    <!-- search dashboard -->
+    <div class="dash glass" id="dash">
+      <svg class="dash__trace" preserveAspectRatio="none" aria-hidden="true">
+        <rect x="1" y="1" rx="20" ry="20" width="99%" height="98%"></rect>
+      </svg>
+      <div class="dash__laser" aria-hidden="true"></div>
+
+      <!-- traveller switcher -->
+      <div class="users" id="users">
+        <span class="users__label">Traveller</span>
+        <div class="users__list" id="users-list"></div>
+        <button class="users__add" id="user-add" type="button" title="Create a traveller workspace">+ New traveller</button>
+        <span class="users__hint" id="users-hint"></span>
       </div>
-<pre><span class="c-dim">you ›</span> find me BIO → BOG in December, buy if it's a deal
 
-<span class="c-key">skybuddy.search_flights</span>(<span class="c-str">"BIO"</span>, <span class="c-str">"BOG"</span>,
-                        <span class="c-str">"2026-12-04"</span>, <span class="c-str">"2027-01-08"</span>)
-  <span class="c-ok">✓</span> 42 fares across 7 sources
-  <span class="c-ok">✓</span> best €684 · Iberia · 1 stop · 16h35m
+      <form class="dash__fields" id="search-form" autocomplete="off">
+        <div class="field">
+          <label for="f-origin">Origin</label>
+          <input id="f-origin" name="origin" value="BIO" maxlength="3" spellcheck="false">
+        </div>
+        <div class="field">
+          <label for="f-dest">Destination</label>
+          <input id="f-dest" name="destination" value="BOG" maxlength="3" spellcheck="false">
+        </div>
+        <div class="field">
+          <label for="f-out">Departure</label>
+          <input id="f-out" name="outbound" type="date" value="2026-12-04">
+        </div>
+        <div class="field">
+          <label for="f-ret">Return</label>
+          <input id="f-ret" name="return" type="date" value="2027-01-08">
+        </div>
+        <div class="field field--action">
+          <button class="btn btn--primary" type="submit" id="search-btn">Search flights</button>
+        </div>
+      </form>
 
-<span class="c-key">skybuddy.evaluate_price</span>(price=<span class="c-ok">684</span>, days=<span class="c-ok">365</span>)
-  <span class="c-ok">✓</span> 121 observations · median €809 · min €681
-  <span class="c-ok">✓</span> verdict <span class="c-str">buy_now</span> — cheapest 10% of the year
+      <div class="results" id="results" aria-live="polite"></div>
 
-<span class="c-key">skybuddy.auto_book_if_deal</span>(...)
-  <span class="c-ok">✓</span> booking intent <span class="c-str">bk_7f3a1c</span> created
-  <span class="c-warn">!</span> awaiting human confirmation
-
-<span class="c-dim">you ›</span> confirm bk_7f3a1c
-
-<span class="c-key">skybuddy.confirm_booking</span>(<span class="c-str">"bk_7f3a1c"</span>, approved_by=<span class="c-str">"harold"</span>)
-  <span class="c-ok">✓</span> agent opening the booking link…
-  <span class="c-ok">✓</span> seat map + passenger checklist handed over</pre>
+      <!-- tracked list, per traveller -->
+      <div class="tracked" id="tracked" hidden>
+        <div class="tracked__head">
+          <h3 id="tracked-title">Tracked flights</h3>
+          <span class="pill" id="tracked-count">0 watched</span>
+        </div>
+        <div class="tracked__list" id="tracked-list"></div>
+      </div>
     </div>
+    <p class="pill" style="margin-top:18px; display:inline-block">
+      Interactive preview — sample fares, stored in your browser. The Python side keeps the real per-user history.
+    </p>
   </div>
 </section>
 
 <!-- ================= STATS ================= -->
-<section style="padding-top:0">
+<section style="padding-top:24px">
   <div class="wrap">
     <div class="stats">
-      <div class="stat"><b>7</b><span>booking sources per search</span></div>
-      <div class="stat"><b>24</b><span>agent-callable tools</span></div>
-      <div class="stat"><b>∞</b><span>routes monitored in parallel</span></div>
-      <div class="stat"><b>365d</b><span>price history behind every buy call</span></div>
+      <div class="stat glass"><b>7</b><span>booking sources per search</span></div>
+      <div class="stat glass"><b>30</b><span>agent-callable tools</span></div>
+      <div class="stat glass"><b>∞</b><span>travellers &amp; routes in parallel</span></div>
+      <div class="stat glass"><b>365d</b><span>price history behind every buy call</span></div>
     </div>
   </div>
 </section>
@@ -112,66 +139,59 @@
          call directly, from the CLI, or through the MCP server.</p>
     </div>
     <div class="cards">
-      <div class="card">
+      <div class="card glass">
         <div class="ico">🔎</div>
         <h3>Real-time flight search</h3>
         <p>Live fares through the Duffel API plus deep links for Google Flights, Avianca, Iberia, KLM,
            Air France, Kayak and Skyscanner. <code>flight_scraper.py</code></p>
       </div>
-      <div class="card">
+      <div class="card glass">
+        <div class="ico">👥</div>
+        <h3>Multi-user workspaces</h3>
+        <p>Every traveller gets isolated preferences, watched routes, passengers, cards, bookings and
+           price history. <code>users.py</code></p>
+      </div>
+      <div class="card glass">
         <div class="ico">📈</div>
         <h3>Price monitoring</h3>
         <p>Watch unlimited routes, keep a full price history, and compute medians and trends per route.
            <code>flight_monitor.py</code></p>
       </div>
-      <div class="card">
+      <div class="card glass">
         <div class="ico">🔔</div>
         <h3>Smart alerts</h3>
         <p>Fires on target price, below-median deals and sharp drops. Console or email, with de-duplicated
            alert history. <code>alerts.py</code></p>
       </div>
-      <div class="card">
+      <div class="card glass">
         <div class="ico">🧠</div>
         <h3>Recommendation engine</h3>
-        <p>Every fare scored 0–100 — 40% price, 30% duration, 20% stops, 10% your preferences — with written
-           reasons. <code>recommendations.py</code></p>
+        <p>Every fare scored 0–100 — 40% price, 30% duration, 20% stops, 10% your preferences — with
+           written reasons. <code>recommendations.py</code></p>
       </div>
-      <div class="card">
-        <div class="ico">📅</div>
-        <h3>Flexible-date sweeps</h3>
-        <p>Every outbound/return pair and both baggage modes on Google Flights, keeping all carrier
-           combinations. <code>google_flights_monitor.py</code></p>
-      </div>
-      <div class="card">
+      <div class="card glass">
         <div class="ico">📉</div>
         <h3>365-day price baseline</h3>
         <p>Scans a year of recorded fares for the route, then turns a live price into a verdict:
            buy&nbsp;now, good, fair, wait or high. <code>price_baseline.py</code></p>
       </div>
-      <div class="card">
+      <div class="card glass">
         <div class="ico">💺</div>
         <h3>Seat selection, end to end</h3>
         <p>FlightAware and SeatMaps for the verified workflow, cross-checked on SeatGuru, aeroLOPA,
-           ExpertFlyer and Flightradar24 — plus when to actually claim the seat.
-           <code>seat_advisor.py</code></p>
+           ExpertFlyer and Flightradar24. <code>seat_advisor.py</code></p>
       </div>
-      <div class="card">
+      <div class="card glass">
+        <div class="ico">📅</div>
+        <h3>Flexible-date sweeps</h3>
+        <p>Every outbound/return pair and both baggage modes on Google Flights, keeping all carrier
+           combinations. <code>google_flights_monitor.py</code></p>
+      </div>
+      <div class="card glass">
         <div class="ico">💳</div>
-        <h3>Loyalty &amp; points</h3>
-        <p>Track cards, balances and tiers, and estimate points earned on any fare before you buy.
-           <code>loyalty_cards.py</code></p>
-      </div>
-      <div class="card">
-        <div class="ico">🧳</div>
-        <h3>Passenger profiles</h3>
-        <p>Store travellers, passports and frequent-flyer numbers so a booking can be filled in one pass.
-           <code>passenger_profiles.py</code></p>
-      </div>
-      <div class="card">
-        <div class="ico">📊</div>
-        <h3>Fare history &amp; dashboard</h3>
-        <p>Alert-safe history store plus a rendered fare dashboard image for reports and digests.
-           <code>fare_history.py · dashboard.py</code></p>
+        <h3>Loyalty &amp; passengers</h3>
+        <p>Cards, balances, tiers and points estimation, plus traveller profiles ready for checkout.
+           <code>loyalty_cards.py · passenger_profiles.py</code></p>
       </div>
     </div>
   </div>
@@ -180,7 +200,7 @@
 <!-- ================= BOOKING SPOTLIGHT ================= -->
 <section id="booking">
   <div class="wrap">
-    <div class="spotlight">
+    <div class="spotlight glass">
       <div class="spotlight-grid">
         <div>
           <p class="eyebrow">The part everyone asks for</p>
@@ -190,25 +210,25 @@
              agreed to, and the checks that must pass before money moves.</p>
           <ol class="steps">
             <li><span class="n">0</span><div><strong>auto_book_if_deal</strong><span>Optional: the 365-day baseline decides the fare is buy-worthy and creates the intent for you.</span></div></li>
-            <li><span class="n">1</span><div><strong>prepare_booking</strong><span>Pins the chosen offer, its booking URL and price into a saved intent.</span></div></li>
+            <li><span class="n">1</span><div><strong>prepare_booking</strong><span>Pins the chosen offer, its booking URL and price into a saved intent, inside that traveller's workspace.</span></div></li>
             <li><span class="n">2</span><div><strong>Human confirmation</strong><span>Nothing executes until you approve the intent by its id.</span></div></li>
             <li><span class="n">3</span><div><strong>confirm_booking</strong><span>Re-validates the price ceiling, then releases the agent playbook.</span></div></li>
-            <li><span class="n">4</span><div><strong>Agent executes</strong><span>Your agent opens the link, fills passenger data, checks the seat map on long-haul, and stops at payment for the final human OK.</span></div></li>
+            <li><span class="n">4</span><div><strong>Agent executes</strong><span>Opens the link, fills passenger data, checks the seat map on long-haul, and stops at payment for the final human OK.</span></div></li>
           </ol>
           <div class="note">
             Safe by default: dry-run mode, a hard price ceiling, and an explicit stop before any payment step.
           </div>
         </div>
-        <div class="terminal">
-          <div class="terminal-bar">
+        <div class="panel-shell glass">
+          <div class="panel-bar">
             <span class="dot r"></span><span class="dot y"></span><span class="dot g"></span>
-            <span class="terminal-title">booking_agent.py</span>
+            <span class="panel-title">booking_agent.py</span>
           </div>
-<pre><span class="c-key">from</span> booking_agent <span class="c-key">import</span> get_booking_agent
+<pre><span class="c-key">from</span> agent_integration <span class="c-key">import</span> create_agent
 
-booking = get_booking_agent()
+sky = create_agent(user=<span class="c-str">"harold"</span>)   <span class="c-dim"># own workspace</span>
 
-intent = booking.prepare_booking(
+intent = sky.prepare_booking(
     booking_url=<span class="c-str">"https://www.iberia.com/…"</span>,
     airline=<span class="c-str">"Iberia"</span>,
     origin=<span class="c-str">"BIO"</span>, destination=<span class="c-str">"BOG"</span>,
@@ -219,11 +239,12 @@ intent = booking.prepare_booking(
     max_price=<span class="c-ok">700.0</span>,          <span class="c-dim"># hard ceiling</span>
 )
 
-<span class="c-dim"># → {"intent_id": "bk_7f3a1c", "status": "awaiting_confirmation"}</span>
+<span class="c-dim"># → {"intent_id": "bk_7f3a1c",</span>
+<span class="c-dim">#    "status": "awaiting_confirmation"}</span>
 
-booking.confirm_booking(<span class="c-str">"bk_7f3a1c"</span>, approved_by=<span class="c-str">"harold"</span>)
+sky.confirm_booking(<span class="c-str">"bk_7f3a1c"</span>, approved_by=<span class="c-str">"harold"</span>)
 
-<span class="c-dim"># → status "ready_to_execute" + a step-by-step</span>
+<span class="c-dim"># → "ready_to_execute" + a step-by-step</span>
 <span class="c-dim">#   agent_playbook for the booking link</span></pre>
         </div>
       </div>
@@ -242,26 +263,24 @@ booking.confirm_booking(<span class="c-str">"bk_7f3a1c"</span>, approved_by=<spa
 
     <div class="tabs" role="tablist">
       <button class="tab" role="tab" aria-selected="true" data-panel="p-cli">CLI</button>
+      <button class="tab" role="tab" aria-selected="false" data-panel="p-users">Travellers</button>
       <button class="tab" role="tab" aria-selected="false" data-panel="p-py">Python</button>
       <button class="tab" role="tab" aria-selected="false" data-panel="p-mcp">MCP / Claude</button>
       <button class="tab" role="tab" aria-selected="false" data-panel="p-book">Booking</button>
     </div>
 
-    <div class="terminal">
-      <div class="terminal-bar">
+    <div class="panel-shell glass">
+      <div class="panel-bar">
         <span class="dot r"></span><span class="dot y"></span><span class="dot g"></span>
-        <span class="terminal-title">bash</span>
+        <span class="panel-title">bash</span>
       </div>
-      <div class="panel" id="p-cli">
+      <div class="code-panel" id="p-cli">
 <pre>git clone https://github.com/HaroldMate1/SkyBuddy.git
 cd SkyBuddy
 pip install -r requirements.txt
 
 <span class="c-dim"># search a route (config or arguments)</span>
 python scripts/flight_scraper.py BIO BOG 2026-12-04 2027-01-08 EUR
-
-<span class="c-dim"># analyse collected fares</span>
-python scripts/analyze_prices.py
 
 <span class="c-dim"># monitor every watched route and raise alerts</span>
 python scripts/flight_monitor.py
@@ -270,10 +289,28 @@ python scripts/flight_monitor.py
 python scripts/price_baseline.py scan --origin BIO --destination BOG
 python scripts/price_baseline.py evaluate --origin BIO --destination BOG --price 684</pre>
       </div>
-      <div class="panel" id="p-py" hidden>
+      <div class="code-panel" id="p-users" hidden>
+<pre><span class="c-dim"># create a workspace per traveller</span>
+python scripts/users.py create --user harold --display-name <span class="c-str">"Harold Mateo"</span> \
+  --email harold@example.com --currency EUR --home-airport BIO
+python scripts/users.py create --user ana --display-name <span class="c-str">"Ana"</span> --currency EUR
+
+python scripts/users.py list
+python scripts/users.py switch --user ana      <span class="c-dim"># set the active traveller</span>
+python scripts/users.py show --user ana        <span class="c-dim"># profile + workspace paths</span>
+
+<span class="c-dim"># every command runs inside the active workspace, or an explicit one</span>
+python scripts/flight_monitor.py --user harold
+python scripts/booking_agent.py list --user ana
+
+<span class="c-dim"># each traveller keeps their own routes, alerts, bookings and history:</span>
+<span class="c-dim">#   data/users/harold/{price_baseline.csv,bookings.json,alerts.json}</span>
+<span class="c-dim">#   config/users/harold/{preferences.json,passengers.json,cards.json}</span></pre>
+      </div>
+      <div class="code-panel" id="p-py" hidden>
 <pre><span class="c-key">from</span> agent_integration <span class="c-key">import</span> create_agent
 
-sky = create_agent()
+sky = create_agent(user=<span class="c-str">"harold"</span>)
 
 result = sky.search_flights(
     origin=<span class="c-str">"BIO"</span>, destination=<span class="c-str">"BOG"</span>,
@@ -286,9 +323,9 @@ result = sky.search_flights(
 
 sky.add_route(<span class="c-str">"Colombia Trip"</span>, <span class="c-str">"BIO"</span>, <span class="c-str">"BOG"</span>,
               <span class="c-str">"2026-12-04"</span>, <span class="c-str">"2027-01-08"</span>, target_price=<span class="c-ok">650</span>)
-sky.check_all_routes()</pre>
+sky.check_all_routes()          <span class="c-dim"># only harold's routes</span></pre>
       </div>
-      <div class="panel" id="p-mcp" hidden>
+      <div class="code-panel" id="p-mcp" hidden>
 <pre><span class="c-dim"># start the universal MCP server</span>
 python scripts/mcp_server.py claude
 
@@ -301,11 +338,16 @@ python scripts/mcp_server.py claude
       <span class="c-str">"cwd"</span>: <span class="c-str">"/path/to/SkyBuddy"</span>
     }
   }
-}</pre>
+}
+
+<span class="c-dim"># the agent switches traveller with the user tools</span>
+create_user(user=<span class="c-str">"ana"</span>, display_name=<span class="c-str">"Ana"</span>)
+switch_user(user=<span class="c-str">"ana"</span>)
+get_current_user()</pre>
       </div>
-      <div class="panel" id="p-book" hidden>
+      <div class="code-panel" id="p-book" hidden>
 <pre><span class="c-dim"># 1 · create the intent from a flight link</span>
-python scripts/booking_agent.py prepare \
+python scripts/booking_agent.py prepare --user harold \
   --booking-url <span class="c-str">"https://www.iberia.com/…"</span> \
   --airline Iberia --origin BIO --destination BOG \
   --outbound-date 2026-12-04 --return-date 2027-01-08 \
@@ -318,7 +360,9 @@ python scripts/booking_agent.py confirm --intent-id bk_7f3a1c --approved-by haro
 python scripts/booking_agent.py playbook --intent-id bk_7f3a1c
 
 <span class="c-dim"># or let the year of history decide and create the intent itself</span>
-python scripts/price_baseline.py trigger --origin BIO --destination BOG   --outbound-date 2026-12-04 --price 684 --airline Iberia   --booking-url <span class="c-str">"https://www.iberia.com/…"</span> --passenger harold</pre>
+python scripts/price_baseline.py trigger --origin BIO --destination BOG \
+  --outbound-date 2026-12-04 --price 684 --airline Iberia \
+  --booking-url <span class="c-str">"https://www.iberia.com/…"</span> --passenger harold</pre>
       </div>
     </div>
   </div>
@@ -331,12 +375,15 @@ python scripts/price_baseline.py trigger --origin BIO --destination BOG   --outb
       <p class="eyebrow">MCP surface</p>
       <h2>Tools any agent can call</h2>
       <p>The same set is exposed to Claude, Hermes, OpenClaw and any MCP client through
-         <code>mcp_server.py</code>.</p>
+         <code>mcp_server.py</code>. Every call runs inside the active traveller's workspace.</p>
     </div>
-    <div class="table-wrap">
+    <div class="table-wrap glass">
       <table>
         <thead><tr><th>Tool</th><th>What it does</th></tr></thead>
         <tbody>
+          <tr><td><code>create_user</code></td><td class="desc">Create a traveller workspace with its own preferences, routes, bookings and history.</td></tr>
+          <tr><td><code>list_users</code> / <code>get_current_user</code></td><td class="desc">See every traveller and which one is active.</td></tr>
+          <tr><td><code>switch_user</code> / <code>update_user</code> / <code>delete_user</code></td><td class="desc">Change the active traveller, edit a profile, or remove one.</td></tr>
           <tr><td><code>search_flights</code></td><td class="desc">Search a route and return fares plus the top scored recommendations.</td></tr>
           <tr><td><code>add_route</code></td><td class="desc">Watch a route with an optional target price.</td></tr>
           <tr><td><code>list_routes</code></td><td class="desc">List watched routes with their latest prices.</td></tr>
@@ -350,6 +397,7 @@ python scripts/price_baseline.py trigger --origin BIO --destination BOG   --outb
           <tr><td><code>prepare_booking</code></td><td class="desc">Create a booking intent from a flight link, pending confirmation.</td></tr>
           <tr><td><code>confirm_booking</code></td><td class="desc">Approve an intent after the price ceiling re-check.</td></tr>
           <tr><td><code>get_booking_playbook</code></td><td class="desc">Return the step-by-step instructions the agent executes on the link.</td></tr>
+          <tr><td><code>mark_booking_executed</code></td><td class="desc">Record the outcome and confirmation code of a booking.</td></tr>
           <tr><td><code>list_bookings</code> / <code>cancel_booking</code></td><td class="desc">Audit trail for every intent, and cancellation before execution.</td></tr>
           <tr><td><code>get_price_baseline</code></td><td class="desc">Scan the last 365 days of recorded fares: min, percentiles, median, trend, confidence.</td></tr>
           <tr><td><code>evaluate_price</code></td><td class="desc">Turn a live fare into a buy verdict with reasons and its percentile.</td></tr>
@@ -372,9 +420,8 @@ python scripts/price_baseline.py trigger --origin BIO --destination BOG   --outb
     </div>
     <div class="chips">
       <span class="chip"><span class="ok">✓</span> Claude · MCP</span>
-      <span class="chip"><span class="ok">✓</span> Hermes</span>
+      <span class="chip"><span class="ok">✓</span> Hermes (incl. Hermes)</span>
       <span class="chip"><span class="ok">✓</span> OpenClaw</span>
-      <span class="chip"><span class="ok">✓</span> Hermes</span>
       <span class="chip"><span class="ok">✓</span> Any MCP client</span>
       <span class="chip"><span class="ok">✓</span> Plain Python / CLI</span>
     </div>
@@ -384,13 +431,13 @@ python scripts/price_baseline.py trigger --origin BIO --destination BOG   --outb
 <!-- ================= CTA ================= -->
 <section>
   <div class="wrap">
-    <div class="cta">
-      <p class="eyebrow" style="justify-content:center">Open source</p>
+    <div class="cta glass">
+      <p class="eyebrow">Open source</p>
       <h2>Track it. Score it. Book it.</h2>
       <p>Clone the repo, point your agent at the MCP server, and let SkyBuddy watch the fare while you sleep.</p>
       <div class="hero-cta">
-        <a class="btn btn-primary" href="https://github.com/HaroldMate1/SkyBuddy" target="_blank" rel="noopener">Open the repository</a>
-        <a class="btn" href="https://github.com/HaroldMate1/SkyBuddy#readme" target="_blank" rel="noopener">Read the docs</a>
+        <a class="btn btn--primary" href="https://github.com/HaroldMate1/SkyBuddy" target="_blank" rel="noopener">Open the repository</a>
+        <a class="btn btn--ghost" href="https://github.com/HaroldMate1/SkyBuddy#readme" target="_blank" rel="noopener">Read the docs</a>
       </div>
     </div>
   </div>
@@ -408,6 +455,8 @@ python scripts/price_baseline.py trigger --origin BIO --destination BOG   --outb
     </nav>
   </div>
 </footer>
+
+<div class="tip" id="tip" role="status"></div>
 
 <script src="/app.js"></script>
 </body>

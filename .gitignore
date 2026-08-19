@@ -57,6 +57,9 @@ data/airline_history.csv
 data/alert_state.json
 data/bookings.json
 data/price_baseline.csv
+data/users/
+config/users.json
+config/users/
 reports/
 
 # Logs

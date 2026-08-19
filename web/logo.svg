@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 48" role="img" aria-label="SkyBuddy">
+  <defs>
+    <linearGradient id="cloud" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#ffffff"/>
+      <stop offset="100%" stop-color="#dff3ff"/>
+    </linearGradient>
+  </defs>
+  <g fill="url(#cloud)">
+    <rect x="7" y="26" width="50" height="18" rx="9"/>
+    <circle cx="23" cy="26" r="13"/>
+    <circle cx="43" cy="29" r="11"/>
+    <circle cx="33" cy="19" r="13"/>
+  </g>
+  <g fill="#1668c8">
+    <circle cx="26" cy="26" r="2.4"/>
+    <circle cx="40" cy="26" r="2.4"/>
+  </g>
+  <path d="M26 33.5c2.2 3.4 11.8 3.4 14 0" fill="none" stroke="#1668c8" stroke-width="3.2" stroke-linecap="round"/>
+</svg>

@@ -18,14 +18,65 @@ from agent_integration import SkyBuddyAgent, AgentType
 class SkyBuddyMCPServer:
     """Universal MCP server for SkyBuddy."""
 
-    def __init__(self, agent_type: str = AgentType.GENERIC):
-        """Initialize MCP server."""
-        self.agent = SkyBuddyAgent(agent_type=agent_type)
+    def __init__(self, agent_type: str = AgentType.GENERIC, user: str | None = None):
+        """Initialize MCP server for a traveller workspace."""
+        self.agent = SkyBuddyAgent(agent_type=agent_type, user=user)
         self.agent_type = agent_type
 
     def list_tools(self) -> list[Dict[str, Any]]:
         """Return list of available tools/methods."""
         return [
+            {
+                "name": "create_user",
+                "description": (
+                    "Create a traveller workspace with its own preferences, watched routes, "
+                    "passengers, cards, bookings and price history."
+                ),
+                "parameters": {
+                    "user": "Unique id (e.g. harold)",
+                    "display_name": "Human-readable name",
+                    "email": "Contact address for alerts (optional)",
+                    "home_airport": "Default origin IATA code (optional)",
+                    "currency": "Preferred currency (default EUR)",
+                    "notes": "Free-text context (optional)",
+                    "make_active": "Switch to this traveller immediately (default true)",
+                },
+            },
+            {
+                "name": "list_users",
+                "description": "List every traveller workspace and which one is active",
+                "parameters": {},
+            },
+            {
+                "name": "get_current_user",
+                "description": "Describe the active traveller and the files their data lives in",
+                "parameters": {},
+            },
+            {
+                "name": "switch_user",
+                "description": "Make a traveller active; every later tool call uses their workspace",
+                "parameters": {"user": "User id to switch to"},
+            },
+            {
+                "name": "update_user",
+                "description": "Update a traveller profile",
+                "parameters": {
+                    "user": "User id",
+                    "display_name": "New display name (optional)",
+                    "email": "New email (optional)",
+                    "home_airport": "New home airport (optional)",
+                    "currency": "New currency (optional)",
+                    "notes": "New notes (optional)",
+                },
+            },
+            {
+                "name": "delete_user",
+                "description": "Delete a traveller workspace",
+                "parameters": {
+                    "user": "User id",
+                    "remove_data": "Also delete their stored files (default false)",
+                },
+            },
             {
                 "name": "search_flights",
                 "description": "Search for flights with AI recommendations",
@@ -288,6 +339,12 @@ class SkyBuddyMCPServer:
     def call_tool(self, tool_name: str, **params) -> Dict[str, Any]:
         """Call a tool and return result."""
         methods = {
+            "create_user": self.agent.create_user,
+            "list_users": self.agent.list_users,
+            "get_current_user": self.agent.get_current_user,
+            "switch_user": self.agent.switch_user,
+            "update_user": self.agent.update_user,
+            "delete_user": self.agent.delete_user,
             "search_flights": self.agent.search_flights,
             "add_route": self.agent.add_route,
             "list_routes": self.agent.list_routes,
@@ -322,7 +379,15 @@ class SkyBuddyMCPServer:
             import inspect
 
             sig = inspect.signature(methods[tool_name])
-            valid_params = {k: v for k, v in params.items() if k in sig.parameters}
+            takes_kwargs = any(
+                parameter.kind is inspect.Parameter.VAR_KEYWORD
+                for parameter in sig.parameters.values()
+            )
+            valid_params = (
+                dict(params)
+                if takes_kwargs
+                else {k: v for k, v in params.items() if k in sig.parameters}
+            )
 
             result = methods[tool_name](**valid_params)
             return result
@@ -378,6 +443,7 @@ if __name__ == "__main__":
     import sys
 
     agent_type = sys.argv[1] if len(sys.argv) > 1 else AgentType.GENERIC
+    user = sys.argv[2] if len(sys.argv) > 2 else None
 
-    server = SkyBuddyMCPServer(agent_type=agent_type)
+    server = SkyBuddyMCPServer(agent_type=agent_type, user=user)
     server.start()

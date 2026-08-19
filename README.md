@@ -7,7 +7,8 @@
 <p align="center">
   <strong>Flight tracking your agent can actually act on.</strong><br>
   Search fares, watch routes, compare every price against a year of history —
-  then hand any MCP agent an auditable booking intent for the exact flight link.
+  then hand any MCP agent an auditable booking intent for the exact flight link.<br>
+  One isolated travel workspace per traveller.
 </p>
 
 <p align="center">
@@ -29,6 +30,7 @@
 - [Quick start](#quick-start)
 - [Configuration](#configuration)
 - [Features in depth](#features-in-depth)
+  - [0. Travellers (multi-user)](#0-travellers-multi-user)
   - [1. Flight search](#1-flight-search)
   - [2. Price monitoring and alerts](#2-price-monitoring-and-alerts)
   - [3. Recommendation engine](#3-recommendation-engine)
@@ -53,15 +55,16 @@
 
 SkyBuddy is a production-grade flight toolkit written in plain Python. Every capability is an
 independent module you can call from the CLI, from Python, or through the bundled MCP server —
-so Claude, Hermes, OpenClaw or your own agent all get the same 24 tools.
+so Claude, Hermes, OpenClaw or your own agent all get the same 30 tools.
 
 | | Capability | Module |
 |---|---|---|
+| 👥 | **A separate workspace per traveller** — routes, alerts, bookings, history | `users.py` |
 | 🔎 | Real-time search across Duffel plus 7 booking sources | `flight_scraper.py`, `duffel_client.py` |
 | 📈 | Unlimited watched routes with full price history | `flight_monitor.py`, `preferences.py` |
 | 🔔 | Target-price, below-median and price-drop alerts | `alerts.py` |
 | 🧠 | Transparent 0–100 flight scoring with written reasons | `recommendations.py` |
-| 📉 | **365-day price baseline and buy/wait verdict** | `price_baseline.py` |
+| 📉 | **365-day baseline: lowest, median, highest, and a buy/wait verdict** | `price_baseline.py` |
 | 🎫 | **Booking intents an agent can execute on the flight link** | `booking_agent.py` |
 | 💺 | Seat-map workflow across FlightAware, SeatMaps and 4 more sites | `seat_advisor.py` |
 | 📅 | Flexible-date Google Flights sweeps, both baggage modes | `google_flights_monitor.py` |
@@ -75,19 +78,27 @@ so Claude, Hermes, OpenClaw or your own agent all get the same 24 tools.
 ## The website
 
 A ready-to-deploy landing page lives in [`web/`](web) and ships with a `vercel.json`, so the
-repository deploys to Vercel as-is. See [Deploying the website to Vercel](#deploying-the-website-to-vercel).
+repository deploys to Vercel as-is. Deep royal-blue to indigo gradient, glassmorphic panels, neon
+cyan and magenta accents, drifting clouds and a paper plane looping across the sky.
+See [Deploying the website to Vercel](#deploying-the-website-to-vercel).
 
 <p align="center">
-  <img src="assets/screenshots/site-hero.jpg" alt="SkyBuddy landing page hero: an agent session that searches, evaluates the price against a year of history and creates a booking intent" width="900">
+  <img src="assets/screenshots/site-hero.jpg" alt="SkyBuddy landing page: glassmorphic search dashboard over a deep blue gradient, with a traveller switcher" width="900">
 </p>
 
-<p align="center"><em>Hero — the full loop, from search to a booking intent awaiting confirmation.</em></p>
+<p align="center"><em>Hero — the search dashboard, with the traveller switcher on top.</em></p>
 
 <p align="center">
-  <img src="assets/screenshots/site-features.jpg" alt="Feature grid showing flight search, monitoring, alerts, recommendations, flexible-date sweeps and the 365-day baseline" width="900">
+  <img src="assets/screenshots/site-dashboard.jpg" alt="Flight result cards with 26-week price trend graphs and low, median and high prices" width="900">
 </p>
 
-<p align="center"><em>Features — every capability, mapped to the module that implements it.</em></p>
+<p align="center"><em>Results — every fare carries its 26-week trend and its recorded low, median and high.</em></p>
+
+<p align="center">
+  <img src="assets/screenshots/site-tracked.jpg" alt="Tracked flights per traveller, one showing a price drop with a green confirmation" width="900">
+</p>
+
+<p align="center"><em>Tracked flights — per traveller, with the price-drop alert animation.</em></p>
 
 <p align="center">
   <img src="assets/screenshots/site-agent-booking.jpg" alt="Agent booking section explaining booking intents, human confirmation and the price ceiling" width="900">
@@ -96,16 +107,16 @@ repository deploys to Vercel as-is. See [Deploying the website to Vercel](#deplo
 <p align="center"><em>Agent booking — how the purchase trigger works, and what stops it.</em></p>
 
 <p align="center">
-  <img src="assets/screenshots/site-quickstart.jpg" alt="Quick start section with tabbed CLI, Python, MCP and booking commands" width="900">
+  <img src="assets/screenshots/site-features.jpg" alt="Feature grid mapping each capability to its Python module" width="900">
 </p>
 
-<p align="center"><em>Quick start — CLI, Python, MCP and booking commands side by side.</em></p>
+<p align="center"><em>Features — every capability, mapped to the module that implements it.</em></p>
 
 <p align="center">
-  <img src="assets/screenshots/site-mcp-tools.jpg" alt="Table of MCP tools any agent can call" width="900">
+  <img src="assets/screenshots/site-mcp-tools.jpg" alt="Table of the MCP tools any agent can call" width="900">
 </p>
 
-<p align="center"><em>MCP surface — the tools any agent can call.</em></p>
+<p align="center"><em>MCP surface — the 30 tools any agent can call.</em></p>
 
 ---
 
@@ -121,20 +132,25 @@ export DUFFEL_API_KEY="your_key_here"
 ```
 
 ```bash
-# 1 · search a route (uses config/search_config.json, or pass arguments)
+# 1 · create a workspace for each traveller (optional — a default one exists)
+python scripts/users.py create --user harold --display-name "Harold Mateo" --home-airport BIO
+python scripts/users.py create --user ana --display-name "Ana"
+python scripts/users.py switch --user harold
+
+# 2 · search a route (uses config/search_config.json, or pass arguments)
 python scripts/flight_scraper.py BIO BOG 2026-12-04 2027-01-08 EUR
 
-# 2 · analyse the fares you have collected
+# 3 · analyse the fares you have collected
 python scripts/analyze_prices.py
 
-# 3 · monitor every watched route and raise alerts
-python scripts/flight_monitor.py
+# 4 · monitor the active traveller's routes and raise alerts
+python scripts/flight_monitor.py --user harold
 
-# 4 · ask what a good price actually is (365 days of history by default)
+# 5 · ask what a good price actually is (365 days of history by default)
 python scripts/price_baseline.py scan --origin BIO --destination BOG
 python scripts/price_baseline.py evaluate --origin BIO --destination BOG --price 684
 
-# 5 · let the history decide and create the purchase trigger
+# 6 · let the history decide and create the purchase trigger
 python scripts/price_baseline.py trigger \
   --origin BIO --destination BOG --outbound-date 2026-12-04 \
   --price 684 --airline Iberia --passenger harold \
@@ -147,11 +163,13 @@ From Python:
 import sys; sys.path.insert(0, "scripts")
 from agent_integration import create_agent
 
-sky = create_agent()
+sky = create_agent(user="harold")        # this traveller's workspace
 
 result = sky.search_flights("BIO", "BOG", "2026-12-04", "2027-01-08")
+print(result["price_history"])           # lowest / median / highest over 365 days
+
 for rec in result["top_recommendations"]:
-    print(rec["score"], rec["airline"], rec["price"], rec["booking_url"])
+    print(rec["score"], rec["airline"], rec["price"], rec["verdict"], rec["booking_url"])
 ```
 
 As an MCP server:
@@ -213,6 +231,48 @@ Travel preferences live in `config/preferences.json` and feed the recommendation
 ---
 
 ## Features in depth
+
+### 0. Travellers (multi-user)
+
+Every traveller gets an isolated workspace. Nothing is shared: preferences, watched routes,
+passengers, cards, alerts, booking intents and price history all live under that user.
+
+```bash
+python scripts/users.py create --user harold --display-name "Harold Mateo" \
+  --email harold@example.com --home-airport BIO --currency EUR
+python scripts/users.py create --user ana --display-name "Ana"
+
+python scripts/users.py list                 # who exists, who is active
+python scripts/users.py switch --user ana    # change the active traveller
+python scripts/users.py show --user ana      # profile + workspace paths
+python scripts/users.py update --user ana --home-airport MAD
+python scripts/users.py delete --user ana --remove-data
+```
+
+```
+config/users.json                     registry + active traveller
+config/users/<user>/preferences.json  routes and preferences
+config/users/<user>/passengers.json
+config/users/<user>/cards.json
+data/users/<user>/alerts.json
+data/users/<user>/bookings.json
+data/users/<user>/price_baseline.csv
+```
+
+Every CLI accepts `--user`, and `create_agent(user=...)` binds the whole toolkit to one
+workspace. The built-in `default` traveller keeps SkyBuddy's original top-level paths, so
+existing single-user installs keep working with no migration.
+
+```python
+harold = create_agent(user="harold")
+ana = create_agent(user="ana")
+
+harold.add_route("Colombia Trip", "BIO", "BOG", "2026-12-04", "2027-01-08", target_price=650)
+ana.list_routes()          # {"routes": [], "total": 0} — separate workspace
+```
+
+From an agent, over MCP: `create_user`, `list_users`, `get_current_user`, `switch_user`,
+`update_user`, `delete_user`.
 
 ### 1. Flight search
 
@@ -281,6 +341,21 @@ python scripts/price_baseline.py evaluate --origin BIO --destination BOG --price
   "buy_threshold": 700.28, "good_threshold": 745.10
 }
 ```
+
+Every quoted fare carries the recorded range, so the number always has context:
+
+```python
+result = sky.search_flights("BIO", "BOG", "2026-12-04", "2027-01-08")
+result["price_history"]
+# {"days": 365, "samples": 121, "lowest": 681.15, "median": 809.27, "highest": 958.8,
+#  "p10": 700.28, "p25": 745.1, "p75": 872.4, "trend": "falling", "confidence": "high"}
+
+result["flights"][0]["verdict"]              # "buy_now"
+result["flights"][0]["vs_median_percent"]    # -15.5
+```
+
+`evaluate_price()` returns `lowest`, `median` and `highest` at the top level too, and
+`verdict_for(price, baseline)` classifies a price against a baseline you already hold.
 
 | Verdict | Meaning | Books? |
 |---|---|---|
@@ -444,11 +519,18 @@ returns is kept — no fixed airline list. Details: [docs/google-flights-monitor
 
 ## MCP tool reference
 
-All 24 tools are exposed by `scripts/mcp_server.py` to every agent type.
+All 30 tools are exposed by `scripts/mcp_server.py` to every agent type. Each one runs inside
+the active traveller's workspace.
 
 | Tool | Parameters | Returns |
 |---|---|---|
-| `search_flights` | `origin`, `destination`, `outbound_date`, `return_date?`, `passengers?`, `cabin_class?` | Fares plus top-3 scored recommendations |
+| `create_user` | `user`, `display_name?`, `email?`, `home_airport?`, `currency?`, `make_active?` | New traveller workspace |
+| `list_users` | — | Every traveller, and which is active |
+| `get_current_user` | — | Active traveller and their file locations |
+| `switch_user` | `user` | Makes that traveller active for later calls |
+| `update_user` | `user`, profile fields | Updated profile |
+| `delete_user` | `user`, `remove_data?` | Removes the traveller |
+| `search_flights` | `origin`, `destination`, `outbound_date`, `return_date?`, `passengers?`, `cabin_class?` | Fares, the 365-day price range, and top-3 scored recommendations |
 | `add_route` | `name`, `origin`, `destination`, `outbound_date`, `return_date?`, `target_price?` | Watched route confirmation |
 | `list_routes` | — | Watched routes with stats |
 | `check_all_routes` | — | Routes checked and alerts triggered |
@@ -467,8 +549,8 @@ All 24 tools are exposed by `scripts/mcp_server.py` to every agent type.
 | `mark_booking_executed` | `intent_id`, `confirmation_code?`, `amount_paid?`, `success?` | Final intent state |
 | `cancel_booking` | `intent_id`, `reason?` | Cancelled intent |
 | `list_bookings` | `status?` | Intents and audit trail |
-| `get_price_baseline` | `origin`, `destination`, `days?`, `outbound_date?` | Min, percentiles, median, trend, confidence |
-| `evaluate_price` | `origin`, `destination`, `price`, `days?`, `target_price?` | Verdict, percentile, reasons |
+| `get_price_baseline` | `origin`, `destination`, `days?`, `outbound_date?` | Lowest, percentiles, median, highest, trend, confidence |
+| `evaluate_price` | `origin`, `destination`, `price`, `days?`, `target_price?` | Verdict, percentile, lowest/median/highest, reasons |
 | `auto_book_if_deal` | `origin`, `destination`, `outbound_date`, `price`, `booking_url`, `airline?`, `passengers?`, `target_price?`, `max_price?` | Assessment, and the intent if it wins |
 | `record_price_observation` | `origin`, `destination`, `price`, `currency?`, `airline?`, … | Stored observation |
 | `get_seat_advisory` | `airline`, `duration_minutes`, `aircraft?`, `flight_number?`, `cabin?` | Workflow, sources, tips, actions |
@@ -480,11 +562,27 @@ All 24 tools are exposed by `scripts/mcp_server.py` to every agent type.
 Every public function, grouped by module. Add `scripts/` to `sys.path` (or run from `scripts/`).
 
 <details open>
+<summary><strong>users.py</strong> — traveller workspaces</summary>
+
+`get_user_manager()` → `UserManager` · `get_workspace(user)` → `Workspace` ·
+`build_workspace(user_id, root)` · `slugify(name)`
+
+`UserManager`: `create_user`, `get_user`, `list_users`, `switch_user`, `update_user`,
+`delete_user`, `workspace`, `current`, `save`
+
+Dataclasses: `UserProfile`, `Workspace` (`ensure()`, `as_dict()`).
+Constant: `DEFAULT_USER`.
+
+CLI: `create · list · switch · show · update · delete`
+</details>
+
+<details open>
 <summary><strong>agent_integration.py</strong> — the unified agent surface</summary>
 
-`create_agent(agent_type)` → `SkyBuddyAgent`; `AgentType.HERMES | OPENCLAW | CLAUDE | GENERIC`
+`create_agent(agent_type, user)` → `SkyBuddyAgent`; `AgentType.HERMES | OPENCLAW | CLAUDE | GENERIC`
 
-`SkyBuddyAgent`: `search_flights`, `add_route`, `list_routes`, `check_all_routes`, `get_alerts`,
+`SkyBuddyAgent`: `create_user`, `list_users`, `get_current_user`, `switch_user`, `update_user`,
+`delete_user`, `use_user`, `search_flights`, `add_route`, `list_routes`, `check_all_routes`, `get_alerts`,
 `get_preferences`, `set_preferences`, `add_card`, `list_cards`, `add_loyalty_program`,
 `estimate_earnings`, `add_passenger`, `list_passengers`, `prepare_booking`,
 `prepare_booking_from_recommendation`, `confirm_booking`, `get_booking_playbook`,
@@ -496,7 +594,7 @@ Every public function, grouped by module. Add `scripts/` to `sys.path` (or run f
 <details>
 <summary><strong>booking_agent.py</strong> — the purchase trigger</summary>
 
-`get_booking_agent()` → `BookingAgent` · `BookingIntent` dataclass (with `log()`)
+`get_booking_agent(user)` → `BookingAgent` · `BookingIntent` dataclass (with `log()`)
 
 `BookingAgent`: `prepare_booking`, `confirm_booking`, `build_playbook`, `get_booking_playbook`,
 `mark_executed`, `cancel_booking`, `list_bookings`, `get_booking`, `save`
@@ -509,9 +607,11 @@ CLI: `prepare · confirm · playbook · executed · cancel · list · show`
 <details>
 <summary><strong>price_baseline.py</strong> — history and buy signal</summary>
 
-`get_price_baseline()` → `PriceBaseline` · `get_buy_engine()` → `BuyDecisionEngine`
+`get_price_baseline(user)` → `PriceBaseline` · `get_buy_engine(user)` → `BuyDecisionEngine`
 
 `PriceBaseline`: `record_price`, `record_many`, `collect`, `build`, `evaluate`
+
+Module helpers: `verdict_for(price, baseline, target_price)`, `price_range(baseline)`
 
 `BuyDecisionEngine`: `auto_book_if_deal`
 
@@ -603,8 +703,6 @@ Constant: `LONG_HAUL_THRESHOLD_MINUTES` (480)
 
 `openclaw_adapter.py`: `create_openclaw_adapter()` → `OpenClawAdapter`: `get_schema`,
 `process_tool_call`, `to_mcp_response`, `validate_input`; plus `OpenClawMCPServer.handle_request`
-
-`legacy_mcp_server.py` / `legacy_mcp_server_v2.py`: `create_mcp_server()` — legacy legacy servers
 </details>
 
 ---
@@ -634,8 +732,9 @@ python -m http.server 8899 --directory web
 # → http://localhost:8899
 ```
 
-Editing: `web/index.html` (content), `web/styles.css` (design tokens at the top), `web/app.js`
-(quick-start tabs and the live GitHub star/fork counter).
+Editing: `web/index.html` (content), `web/styles.css` (design tokens at the top — colours,
+glass, motion), `web/app.js` (traveller switcher, demo search, sparklines, background clouds
+and the looping paper plane, live GitHub counters). `web/logo.svg` is the cloud mark.
 
 ---
 
@@ -665,14 +764,17 @@ SkyBuddy/
 ├── docs/                      # seat advisory + Google Flights monitoring guides
 ├── config/
 │   ├── search_config.json     # route configuration
-│   ├── preferences.json       # preferences and watched routes
-│   ├── passengers.json        # traveller profiles
-│   └── cards.json             # cards and loyalty programs
+│   ├── users.json             # traveller registry + active traveller
+│   ├── users/<user>/          # preferences, passengers, cards per traveller
+│   ├── preferences.json       # default workspace: preferences and watched routes
+│   ├── passengers.json        # default workspace: traveller profiles
+│   └── cards.json             # default workspace: cards and loyalty programs
 ├── data/
-│   ├── price_baseline.csv     # long-term observation store (365-day scans)
+│   ├── users/<user>/          # alerts, bookings and price history per traveller
+│   ├── price_baseline.csv     # default workspace: 365-day observation store
 │   ├── price_observations.csv # manual/collector observations
-│   ├── bookings.json          # booking intents and audit trail
-│   └── alerts.json            # alert history
+│   ├── bookings.json          # default workspace: booking intents
+│   └── alerts.json            # default workspace: alert history
 └── assets/                    # logo and website screenshots
 ```
 
@@ -699,8 +801,8 @@ python -m unittest discover -s tests -v
 ```
 
 The suite covers the seat advisory, fare history, Google Flights collection, the booking-intent
-lifecycle (ceilings, confirmation, payment stops, audit trail) and the price baseline (windowing,
-verdicts, auto-trigger). CI runs it on every push via `.github/workflows/tests.yml`.
+lifecycle (ceilings, confirmation, payment stops, audit trail), the price baseline (windowing,
+verdicts, auto-trigger) and traveller workspaces (isolation, switching, deletion). CI runs it on every push via `.github/workflows/tests.yml`.
 
 ---
 

@@ -45,6 +45,13 @@ step and no `node_modules`.
 > real sign-in volume, add your own SMTP under **Authentication → Emails → SMTP**,
 > or point it at Resend.
 
+## 1b · The second migration (booking, wallet, travellers)
+
+Run [`supabase/schema-2-app-features.sql`](../supabase/schema-2-app-features.sql) in the
+same SQL editor. It adds `booking_intents`, `loyalty_cards` and `passengers`,
+all under row-level security, which the dashboard's **Book**, **Wallet** and
+**Travellers** tools use.
+
 ## 2 · Duffel
 
 1. Sign up at [duffel.com](https://duffel.com) and open **Developers → Access tokens**.
@@ -62,6 +69,35 @@ step and no `node_modules`.
      but only delivers to your own verified address).
    - Properly: verify a domain in Resend and use `SkyBuddy <alerts@yourdomain>`.
 
+## 3b · Real prices: the Google Flights collector
+
+Duffel test tokens invent inventory, so identical searches return different
+fares. For real prices without waiting for Duffel to approve a live account,
+SkyBuddy prices tracked routes with the Google Flights client from a scheduled
+GitHub Actions job — the site reads whatever it writes.
+
+**GitHub → your repository → Settings → Secrets and variables → Actions → New
+repository secret**, add four:
+
+```
+SUPABASE_URL                 https://xxxxxxxx.supabase.co
+SUPABASE_SERVICE_ROLE_KEY    eyJhbGci...
+SKYBUDDY_SITE_URL            https://skybuddy-ochre.vercel.app
+CRON_SECRET                  the same value you put in Vercel
+```
+
+The workflow (`.github/workflows/price-collector.yml`) then runs at 06:10,
+12:10 and 18:10 UTC. Run it by hand any time from **Actions → Collect flight
+prices → Run workflow**.
+
+To add the dashboard's **Refresh prices** button, create a fine-grained GitHub
+token with *Contents: read and write* on this repository and set it in Vercel as
+`GITHUB_DISPATCH_TOKEN` (optionally `GITHUB_REPO` if you rename the repo).
+
+> The scraper reads Google Flights' public results. It is unofficial, so it can
+> break if Google changes its responses, and it should be run at a modest
+> frequency — three times a day is deliberate.
+
 ## 4 · Vercel environment variables
 
 **Project → Settings → Environment Variables** (Production *and* Preview):
@@ -74,6 +110,7 @@ DUFFEL_API_KEY=duffel_test_...
 RESEND_API_KEY=re_...
 ALERT_FROM_EMAIL=SkyBuddy <onboarding@resend.dev>
 CRON_SECRET=<any long random string>
+GITHUB_DISPATCH_TOKEN=<optional, enables the Refresh prices button>
 ```
 
 Then **redeploy** (Deployments → ⋯ → Redeploy) so the functions pick them up.

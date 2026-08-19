@@ -106,6 +106,14 @@ Signed out, it is an interactive preview. Signed in, it is the real thing:
 - **A nightly check** (Vercel Cron) that re-prices every tracked route.
 - **Email alerts** through Resend when your target is met, a new low is set, or
   the fare drops 10%+ since the last check.
+- **Real Google Flights prices** collected three times a day by a GitHub Actions
+  job, or on demand from the dashboard.
+- **Seat advisory** per fare — FlightAware → SeatMaps plus SeatGuru, aeroLOPA,
+  ExpertFlyer and Flightradar24, using the real aircraft type.
+- **Booking intents** in the browser: a hard ceiling, the agent playbook, an
+  explicit confirmation step and a full audit trail.
+- **Wallet and travellers** — cards, earn rates, points on a fare, and the
+  passenger profiles the booking checklist fills from.
 
 Setup — Supabase, Duffel, Resend and the environment variables — is documented
 step by step in **[docs/web-app-setup.md](docs/web-app-setup.md)**. Deep royal-blue to indigo gradient, glassmorphic panels, neon
@@ -761,6 +769,10 @@ vercel --prod
 | `api/search.js` | Authenticated live fare search (Duffel, server-side) |
 | `api/check.js` | "Check now" for one tracked flight |
 | `api/cron/check-prices.js` | The nightly sweep that raises and emails alerts |
+| `api/evaluate.js` | Applies the alert rules to prices the collector stored |
+| `api/collect.js` | Triggers the Google Flights collector on demand |
+| `scripts/web_price_collector.py` | Prices tracked routes with Google Flights (GitHub Actions) |
+| `web/features.js` | Seat advisory, booking playbook and points logic in the browser |
 | `server/` | Shared Duffel, Supabase REST, alert-rule and email helpers |
 | `supabase/schema.sql` | Tables, row-level security and the signup trigger |
 

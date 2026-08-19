@@ -14,6 +14,8 @@
 
   /* Overridable behaviour. live.js replaces these once a session exists. */
   var hooks = { search: null, track: null, renderTracked: null };
+  /* other modules push (card, flight) => void here to add buttons */
+  var cardDecorators = [];
   var mode = "demo";
 
   /* ---------------- helpers ---------------- */
@@ -576,6 +578,7 @@
         trackInDemo(flight, track, history);
       });
       card.querySelector(".flight__price").appendChild(track);
+      cardDecorators.forEach(function (decorate) { decorate(card, flight); });
 
       results.appendChild(card);
     });
@@ -818,6 +821,7 @@
 
   window.SkyBuddy = {
     hooks: hooks,
+    cardDecorators: cardDecorators,
     money: money,
     escapeHtml: escapeHtml,
     minutesToText: minutesToText,

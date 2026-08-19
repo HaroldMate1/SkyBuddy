@@ -8,7 +8,8 @@
  */
 
 const { admin } = require("../../server/supabase");
-const { checkTrackedFlight } = require("../../server/tracking");
+const { checkTrackedFlight, evaluateStoredPrice } = require("../../server/tracking");
+const { isSandbox } = require("../../server/duffel");
 
 /** Keep one invocation inside the serverless time budget. */
 const MAX_FLIGHTS_PER_RUN = 40;
@@ -42,10 +43,26 @@ module.exports = async (req, res) => {
     );
     const byUser = Object.fromEntries((profiles || []).map((profile) => [profile.id, profile]));
 
+    // A Duffel test token invents prices, so the sweep must not store them as
+    // history. When the key is a sandbox one we only re-evaluate what the
+    // Google Flights collector already wrote.
+    const sandbox = isSandbox();
+
     const results = [];
     for (const flight of flights) {
       const profile = byUser[flight.user_id] || {};
       try {
+        if (sandbox) {
+          results.push(
+            await evaluateStoredPrice({
+              ...flight,
+              email: profile.email,
+              display_name: profile.display_name,
+              email_alerts: profile.email_alerts,
+            })
+          );
+          continue;
+        }
         results.push(
           await checkTrackedFlight(
             {
@@ -65,6 +82,7 @@ module.exports = async (req, res) => {
 
     return res.status(200).json({
       checked: results.length,
+      mode: sandbox ? "evaluate_stored" : "duffel",
       alerts: results.filter((result) => result.status === "alerted").length,
       errors: results.filter((result) => result.status === "error").length,
       duration_ms: Date.now() - started,

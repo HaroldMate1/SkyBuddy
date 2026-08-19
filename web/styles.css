@@ -1254,3 +1254,84 @@ footer { border-top: 1px solid rgba(169, 184, 212, 0.12); padding: 34px 0 52px; 
   .combo__item { min-height: 46px; }
   .flight:hover, .card:hover { transform: none; }
 }
+
+/* ---------- trip-tool sheets (seats, bookings, wallet, travellers) ---------- */
+
+.sheet {
+  position: fixed;
+  inset: 0;
+  z-index: 130;
+  display: grid;
+  place-items: start center;
+  padding: 40px 20px;
+  overflow-y: auto;
+  background: rgba(6, 12, 22, 0.74);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  animation: fade-in 0.22s var(--ease) both;
+}
+.sheet[hidden] { display: none; }
+.sheet__panel {
+  position: relative;
+  width: min(720px, 100%);
+  padding: 34px;
+  animation: rise-in 0.35s var(--ease) both;
+}
+.sheet__panel h3 { font-size: 23px; margin-bottom: 8px; }
+.sheet__panel h4 {
+  font-family: var(--display);
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--cyan);
+  margin: 26px 0 12px;
+}
+.sheet__close {
+  position: absolute;
+  top: 16px;
+  right: 18px;
+  border: 0;
+  background: transparent;
+  color: var(--ice-dim);
+  font-size: 15px;
+  cursor: pointer;
+}
+.sheet__close:hover { color: var(--magenta); }
+.sheet__lede { font-size: 14.5px; }
+.sheet__body .steps li { align-items: flex-start; }
+.sheet__body .steps strong { display: block; font-size: 14.5px; text-transform: capitalize; }
+.sheet__body .steps strong em { font-style: normal; font-weight: 400; font-size: 12px; color: var(--ice-dim); margin-left: 6px; }
+.sheet__body .steps span { display: block; font-size: 13.5px; }
+.sheet__body .steps .muted { color: var(--ice-dim); font-size: 12.5px; margin-top: 2px; }
+.sheet__body table { min-width: 0; }
+.sheet__body td code { font-size: 12px; color: var(--ice-dim); }
+.bullets { margin: 0; padding-left: 18px; display: grid; gap: 7px; }
+.bullets li { font-size: 13.5px; color: var(--ice); }
+.sheet__actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 26px; }
+.sheet__form { display: grid; gap: 10px; grid-template-columns: 1fr 1fr; margin-top: 8px; }
+.sheet__form input {
+  padding: 11px 15px;
+  border-radius: 12px;
+  border: 1px solid rgba(169, 184, 212, 0.28);
+  background: rgba(10, 20, 33, 0.7);
+  color: var(--white);
+  font-family: var(--body);
+  font-size: 14px;
+  outline: none;
+}
+.sheet__form input:focus { border-color: rgba(0, 240, 255, 0.6); }
+.sheet__form .btn { grid-column: 1 / -1; }
+
+.flight__tools { display: flex; gap: 8px; margin-top: 8px; }
+.account__tools { display: flex; flex-wrap: wrap; gap: 8px; }
+
+@media (max-width: 680px) {
+  .sheet { padding: 16px; }
+  .sheet__panel { padding: 22px 18px; }
+  .sheet__form { grid-template-columns: 1fr; }
+  .flight__tools { width: 100%; }
+  .flight__tools .btn { flex: 1; }
+  .account__tools { width: 100%; }
+  .account__tools .btn { flex: 1 1 40%; }
+}

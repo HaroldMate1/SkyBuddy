@@ -7,6 +7,14 @@
    ============================================================ */
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.4";
+import {
+  showSeatSheet,
+  openSheet,
+  closeSheet,
+  buildPlaybook,
+  intentWarnings,
+  estimatePoints,
+} from "/features.js";
 
 const UI = window.SkyBuddy;
 const authButton = document.getElementById("auth-btn");
@@ -120,6 +128,7 @@ async function applySession(next) {
   profile = await loadProfile();
   renderAccount();
 
+  if (!UI.cardDecorators.length) UI.cardDecorators.push(decorateCard);
   UI.hooks.search = liveSearch;
   UI.hooks.track = trackFlight;
   UI.hooks.renderTracked = renderTracked;
@@ -157,7 +166,34 @@ function renderAccount() {
         ? '<span class="account__warn" title="Duffel test tokens invent new inventory on every request, so prices change between identical searches.">Duffel test mode — prices are randomised sandbox data</span>'
         : ""
     }
+    <span class="account__tools">
+      <button class="btn btn--sm btn--ghost" id="tool-wallet" type="button">Wallet</button>
+      <button class="btn btn--sm btn--ghost" id="tool-passengers" type="button">Travellers</button>
+      <button class="btn btn--sm btn--ghost" id="tool-bookings" type="button">Bookings</button>
+      ${features.collector ? '<button class="btn btn--sm btn--ghost" id="tool-collect" type="button">Refresh prices</button>' : ""}
+    </span>
   `;
+
+  document.getElementById("tool-wallet").addEventListener("click", showWallet);
+  document.getElementById("tool-passengers").addEventListener("click", showPassengers);
+  document.getElementById("tool-bookings").addEventListener("click", showBookings);
+  const collectButton = document.getElementById("tool-collect");
+  if (collectButton) {
+    collectButton.addEventListener("click", async () => {
+      collectButton.disabled = true;
+      collectButton.textContent = "Queued…";
+      try {
+        const result = await authedFetch("/api/collect", {});
+        UI.showMessage(result.message);
+      } catch (error) {
+        UI.showMessage(error.message, "error");
+      }
+      window.setTimeout(() => {
+        collectButton.disabled = false;
+        collectButton.textContent = "Refresh prices";
+      }, 4000);
+    });
+  }
 
   document.getElementById("alerts-toggle").addEventListener("change", async (event) => {
     const enabled = event.target.checked;
@@ -381,4 +417,318 @@ async function renderTracked() {
 
     trackedList.appendChild(row);
   }
+}
+
+
+/* ---------------- trip tools ---------------- */
+
+/** Add the seat and booking buttons to a rendered fare card. */
+function decorateCard(card, flight) {
+  const actions = document.createElement("span");
+  actions.className = "flight__tools";
+
+  const seats = document.createElement("button");
+  seats.type = "button";
+  seats.className = "btn btn--sm btn--ghost";
+  seats.textContent = "Seats";
+  seats.addEventListener("click", () => showSeatSheet(flight));
+  actions.appendChild(seats);
+
+  const book = document.createElement("button");
+  book.type = "button";
+  book.className = "btn btn--sm btn--ghost";
+  book.textContent = "Book";
+  book.addEventListener("click", () => prepareBooking(flight));
+  actions.appendChild(book);
+
+  card.querySelector(".flight__price").appendChild(actions);
+}
+
+/* ---------------- booking intents ---------------- */
+
+async function prepareBooking(flight) {
+  const query = UI.readSearch();
+  const travellers = await listPassengers();
+  const ceilingRaw = window.prompt(
+    `Hard price ceiling for this booking (${flight.currency || "EUR"}):`,
+    String(Math.round(Number(flight.price) * 1.02))
+  );
+  if (ceilingRaw === null) return;
+  const ceiling = Number(String(ceilingRaw).replace(/[^\d.]/g, "")) || Number(flight.price);
+
+  const draft = {
+    user_id: session.user.id,
+    booking_url: flight.booking_url || "https://www.google.com/travel/flights",
+    airline: flight.airline,
+    flight_numbers: flight.flight_number || "",
+    aircraft: flight.aircraft || "",
+    duration_minutes: flight.duration_minutes || 0,
+    origin: query.origin,
+    destination: query.destination,
+    outbound_date: query.outbound_date,
+    return_date: query.return_date,
+    cabin: "economy",
+    price: flight.price,
+    currency: flight.currency || "EUR",
+    max_price: ceiling,
+    passengers: travellers.map((person) => person.name),
+    notes: "Created from the SkyBuddy dashboard.",
+  };
+  draft.warnings = intentWarnings(draft);
+
+  const { data, error } = await supabase.from("booking_intents").insert(draft).select().single();
+  if (error) return UI.showMessage(error.message, "error");
+
+  showIntentSheet(data, travellers);
+}
+
+function showIntentSheet(intent, travellers) {
+  const playbook = buildPlaybook(intent, { passengers: travellers });
+  const money = (value) => UI.money(value, intent.currency);
+
+  const steps = playbook.steps
+    .map(
+      (step, index) => `
+      <li><span class="n">${index + 1}</span>
+        <div><strong>${UI.escapeHtml(step.step.replace(/_/g, " "))}</strong>
+        <span>${UI.escapeHtml(step.action)}</span>
+        <span class="muted">Check: ${UI.escapeHtml(step.check)}</span></div>
+      </li>`
+    )
+    .join("");
+
+  const warnings = (intent.warnings || [])
+    .map((warning) => `<li>${UI.escapeHtml(warning)}</li>`)
+    .join("");
+
+  const panel = openSheet(
+    `${UI.escapeHtml(intent.origin)} → ${UI.escapeHtml(intent.destination)} · ${money(intent.price)}`,
+    `
+      <p class="sheet__lede">
+        Status <strong>${UI.escapeHtml(intent.status.replace(/_/g, " "))}</strong> ·
+        ceiling ${money(intent.max_price)} ·
+        ${intent.passengers && intent.passengers.length ? UI.escapeHtml(intent.passengers.join(", ")) : "no traveller attached"}
+      </p>
+      ${warnings ? `<div class="note"><ul class="bullets">${warnings}</ul></div>` : ""}
+      <h4>Agent playbook</h4>
+      <ol class="steps">${steps}</ol>
+      <h4>Abort if</h4>
+      <ul class="bullets">${playbook.abortConditions.map((item) => `<li>${UI.escapeHtml(item)}</li>`).join("")}</ul>
+      <div class="sheet__actions">
+        ${
+          intent.status === "awaiting_confirmation"
+            ? '<button class="btn btn--primary" id="intent-confirm" type="button">Confirm this booking</button>'
+            : `<a class="btn btn--primary" href="${UI.escapeHtml(intent.booking_url)}" target="_blank" rel="noopener">Open the flight</a>`
+        }
+        <button class="btn btn--ghost" id="intent-cancel" type="button">Cancel intent</button>
+      </div>
+    `,
+    "Booking intent"
+  );
+
+  const confirm = panel.querySelector("#intent-confirm");
+  if (confirm) {
+    confirm.addEventListener("click", async () => {
+      const { data } = await supabase
+        .from("booking_intents")
+        .update({
+          status: "ready_to_execute",
+          approved_by: profile.email,
+          approved_at: new Date().toISOString(),
+          history: [...(intent.history || []), { at: new Date().toISOString(), event: "confirmed" }],
+        })
+        .eq("id", intent.id)
+        .select()
+        .single();
+      showIntentSheet(data || { ...intent, status: "ready_to_execute" }, travellers);
+    });
+  }
+
+  panel.querySelector("#intent-cancel").addEventListener("click", async () => {
+    await supabase.from("booking_intents").update({ status: "cancelled" }).eq("id", intent.id);
+    closeSheet();
+  });
+}
+
+async function showBookings() {
+  const { data } = await supabase
+    .from("booking_intents")
+    .select("*")
+    .order("created_at", { ascending: false })
+    .limit(20);
+
+  const intents = data || [];
+  const rows = intents
+    .map(
+      (intent) => `
+      <tr>
+        <td><code>${UI.escapeHtml(intent.id.slice(0, 8))}</code></td>
+        <td>${UI.escapeHtml(intent.origin)} → ${UI.escapeHtml(intent.destination)}<br>
+            <small>${UI.escapeHtml(intent.outbound_date)}</small></td>
+        <td>${UI.money(intent.price, intent.currency)}</td>
+        <td><span class="price__verdict ${
+          intent.status === "booked" ? "v-buy" : intent.status === "cancelled" ? "v-high" : "v-good"
+        }">${UI.escapeHtml(intent.status.replace(/_/g, " "))}</span></td>
+      </tr>`
+    )
+    .join("");
+
+  openSheet(
+    "Booking intents",
+    intents.length
+      ? `<div class="table-wrap"><table><thead><tr><th>id</th><th>route</th><th>price</th><th>status</th></tr></thead><tbody>${rows}</tbody></table></div>
+         <p class="sheet__lede">Nothing is ever purchased automatically: an intent only becomes actionable once you confirm it.</p>`
+      : '<p class="sheet__lede">No booking intents yet. Search a route and press <strong>Book</strong> on a fare.</p>',
+    "Audit trail"
+  );
+}
+
+/* ---------------- wallet ---------------- */
+
+async function showWallet() {
+  const { data } = await supabase.from("loyalty_cards").select("*").order("created_at");
+  const cards = data || [];
+
+  const { data: tracked } = await supabase
+    .from("tracked_flights")
+    .select("last_price,currency")
+    .not("last_price", "is", null)
+    .order("last_price", { ascending: false })
+    .limit(1);
+  const fare = tracked && tracked[0] ? Number(tracked[0].last_price) : 0;
+  const currency = tracked && tracked[0] ? tracked[0].currency : "EUR";
+
+  const estimate = fare ? estimatePoints(cards, fare) : [];
+  const rows = cards
+    .map(
+      (card) => `
+      <tr>
+        <td><strong>${UI.escapeHtml(card.issuer)} ${UI.escapeHtml(card.product)}</strong><br>
+            <small>${UI.escapeHtml(card.programme || "")} ${card.balance ? `· ${card.balance.toLocaleString()} pts` : ""}</small></td>
+        <td>${Number(card.points_per_unit).toFixed(2)} / ${UI.escapeHtml(currency)}</td>
+        <td><button class="btn btn--sm btn--ghost" data-remove-card="${card.id}">Remove</button></td>
+      </tr>`
+    )
+    .join("");
+
+  const panel = openSheet(
+    "Wallet",
+    `
+      ${
+        cards.length
+          ? `<div class="table-wrap"><table><thead><tr><th>card</th><th>earn rate</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>`
+          : '<p class="sheet__lede">No cards yet. Add one to see what a fare would earn.</p>'
+      }
+      ${
+        estimate.length
+          ? `<h4>On your most expensive tracked fare (${UI.money(fare, currency)})</h4>
+             <ul class="bullets">${estimate
+               .map((row) => `<li><strong>${row.points.toLocaleString()} pts</strong> — ${UI.escapeHtml(row.card)}</li>`)
+               .join("")}</ul>`
+          : ""
+      }
+      <h4>Add a card</h4>
+      <form class="sheet__form" id="card-form">
+        <input name="issuer" placeholder="Issuer (American Express)" required>
+        <input name="product" placeholder="Product (Platinum)" required>
+        <input name="points_per_unit" type="number" step="0.1" min="0" placeholder="Points per ${UI.escapeHtml(currency)}" value="1.5" required>
+        <input name="programme" placeholder="Programme (Membership Rewards)">
+        <button class="btn btn--primary" type="submit">Add card</button>
+      </form>
+    `,
+    "Loyalty and points"
+  );
+
+  panel.querySelectorAll("[data-remove-card]").forEach((button) => {
+    button.addEventListener("click", async () => {
+      await supabase.from("loyalty_cards").delete().eq("id", button.dataset.removeCard);
+      showWallet();
+    });
+  });
+
+  panel.querySelector("#card-form").addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const form = new FormData(event.target);
+    const issuer = form.get("issuer");
+    const product = form.get("product");
+    const { error } = await supabase.from("loyalty_cards").insert({
+      user_id: session.user.id,
+      card_id: `${issuer}-${product}`.toLowerCase().replace(/[^a-z0-9]+/g, "-"),
+      issuer,
+      product,
+      points_per_unit: Number(form.get("points_per_unit")) || 1,
+      programme: form.get("programme") || null,
+    });
+    if (error) return UI.showMessage(error.message, "error");
+    showWallet();
+  });
+}
+
+/* ---------------- passengers ---------------- */
+
+async function listPassengers() {
+  const { data } = await supabase.from("passengers").select("*").order("created_at");
+  return data || [];
+}
+
+async function showPassengers() {
+  const travellers = await listPassengers();
+  const rows = travellers
+    .map(
+      (person) => `
+      <tr>
+        <td><strong>${UI.escapeHtml(person.given_name)} ${UI.escapeHtml(person.family_name)}</strong><br>
+            <small>${UI.escapeHtml(person.name)} ${person.born_on ? `· ${UI.escapeHtml(person.born_on)}` : ""}</small></td>
+        <td>${UI.escapeHtml(person.passport || "no passport on file")}</td>
+        <td><button class="btn btn--sm btn--ghost" data-remove-passenger="${person.id}">Remove</button></td>
+      </tr>`
+    )
+    .join("");
+
+  const panel = openSheet(
+    "Travellers",
+    `
+      ${
+        travellers.length
+          ? `<div class="table-wrap"><table><thead><tr><th>traveller</th><th>passport</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>`
+          : '<p class="sheet__lede">No traveller profiles yet. A booking intent needs at least one.</p>'
+      }
+      <h4>Add a traveller</h4>
+      <form class="sheet__form" id="passenger-form">
+        <input name="given_name" placeholder="Given name" required>
+        <input name="family_name" placeholder="Family name" required>
+        <input name="born_on" type="date" placeholder="Date of birth">
+        <input name="passport" placeholder="Passport number">
+        <input name="nationality" placeholder="Nationality (CO)">
+        <button class="btn btn--primary" type="submit">Add traveller</button>
+      </form>
+      <p class="sheet__lede">Stored under your account only, and used to fill the booking checklist.</p>
+    `,
+    "Passenger profiles"
+  );
+
+  panel.querySelectorAll("[data-remove-passenger]").forEach((button) => {
+    button.addEventListener("click", async () => {
+      await supabase.from("passengers").delete().eq("id", button.dataset.removePassenger);
+      showPassengers();
+    });
+  });
+
+  panel.querySelector("#passenger-form").addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const form = new FormData(event.target);
+    const given = form.get("given_name");
+    const family = form.get("family_name");
+    const { error } = await supabase.from("passengers").insert({
+      user_id: session.user.id,
+      name: `${given}-${family}`.toLowerCase().replace(/[^a-z0-9]+/g, "-"),
+      given_name: given,
+      family_name: family,
+      born_on: form.get("born_on") || null,
+      passport: form.get("passport") || null,
+      nationality: form.get("nationality") || null,
+    });
+    if (error) return UI.showMessage(error.message, "error");
+    showPassengers();
+  });
 }

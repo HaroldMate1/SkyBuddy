@@ -75,11 +75,119 @@ async function recentlyAlerted(flightId, kind) {
 }
 
 /**
- * Check one tracked flight.
+ * Apply one price to a tracked flight: optionally store it, refresh the
+ * statistics, decide whether it deserves an alert, and send the email.
  *
- * @param {object} flight  row from tracked_flights
- * @param {object} options { duffelKey, sendEmail, minIntervalSeconds }
- * @returns {Promise<object>} what happened, for the API response and logs
+ * Every price source funnels through here — Duffel, the Google Flights
+ * collector, or a manual entry — so the alert rules live in exactly one place.
+ *
+ * @param {object} flight   row from tracked_flights (plus email/display_name)
+ * @param {object} quote    { price, currency, airline, booking_url, source }
+ * @param {object} options  { insert, sendEmail, sandbox }
+ */
+async function applyPrice(flight, quote, { insert = true, sendEmail = true, sandbox = false } = {}) {
+  const price = round(quote.price);
+  const currency = quote.currency || flight.currency || "EUR";
+
+  if (insert) {
+    await admin("price_observations", {
+      method: "POST",
+      body: {
+        tracked_flight_id: flight.id,
+        user_id: flight.user_id,
+        price,
+        currency,
+        airline: quote.airline,
+        booking_url: quote.booking_url,
+        source: quote.source || "duffel",
+      },
+      prefer: "return=minimal",
+    });
+  }
+
+  // Recompute the statistics from the full history.
+  const history = await admin(
+    `price_observations?tracked_flight_id=eq.${flight.id}&select=price&order=observed_at.desc&limit=400`
+  );
+  const prices = (history || []).map((row) => Number(row.price)).filter(Number.isFinite);
+
+  const stats = {
+    last_price: price,
+    lowest_price: round(Math.min(...prices, price)),
+    highest_price: round(Math.max(...prices, price)),
+    median_price: round(median(prices.length ? prices : [price])),
+    last_airline: quote.airline,
+    last_booking_url: quote.booking_url,
+    last_checked_at: new Date().toISOString(),
+  };
+
+  const alert = classify({
+    price,
+    target: flight.target_price,
+    previousLow: flight.lowest_price,
+    previousPrice: flight.last_price,
+    samples: prices.length,
+  });
+
+  await admin(`tracked_flights?id=eq.${flight.id}`, { method: "PATCH", body: stats });
+
+  if (!alert) {
+    return { flight_id: flight.id, status: "checked", price, currency, stats };
+  }
+  if (await recentlyAlerted(flight.id, alert.kind)) {
+    return { flight_id: flight.id, status: "alert_suppressed", price, currency, kind: alert.kind };
+  }
+
+  let emailedAt = null;
+  if (sendEmail && flight.email && flight.email_alerts !== false) {
+    emailedAt = await sendAlertEmail({
+      to: flight.email,
+      name: flight.display_name,
+      flight,
+      price,
+      currency,
+      previousPrice: flight.last_price,
+      stats,
+      kind: alert.kind,
+      message: alert.message,
+      bookingUrl: quote.booking_url,
+      airline: quote.airline,
+      sandbox,
+    });
+  }
+
+  await admin("alerts", {
+    method: "POST",
+    body: {
+      tracked_flight_id: flight.id,
+      user_id: flight.user_id,
+      kind: alert.kind,
+      price,
+      previous_price: flight.last_price,
+      currency,
+      message: alert.message,
+      booking_url: quote.booking_url,
+      emailed_at: emailedAt,
+    },
+    prefer: "return=minimal",
+  });
+
+  return {
+    flight_id: flight.id,
+    status: "alerted",
+    kind: alert.kind,
+    price,
+    currency,
+    emailed: Boolean(emailedAt),
+    stats,
+  };
+}
+
+/**
+ * Re-price one tracked flight through Duffel.
+ *
+ * @param {object} flight   row from tracked_flights
+ * @param {object} options  { duffelKey, sendEmail, minIntervalSeconds }
  */
 async function checkTrackedFlight(flight, { duffelKey, sendEmail = true, minIntervalSeconds = 0 } = {}) {
   if (minIntervalSeconds && flight.last_checked_at) {
@@ -114,99 +222,49 @@ async function checkTrackedFlight(flight, { duffelKey, sendEmail = true, minInte
     return { flight_id: flight.id, status: "no_offers" };
   }
 
-  const price = round(cheapest.price);
-  const currency = cheapest.currency || flight.currency || "EUR";
-
-  await admin("price_observations", {
-    method: "POST",
-    body: {
-      tracked_flight_id: flight.id,
-      user_id: flight.user_id,
-      price,
-      currency,
+  return applyPrice(
+    flight,
+    {
+      price: cheapest.price,
+      currency: cheapest.currency,
       airline: cheapest.airline,
       booking_url: cheapest.booking_url,
       source: sandbox ? "duffel_test" : "duffel",
     },
-    prefer: "return=minimal",
-  });
-
-  // Recompute the statistics from the full history, newest first.
-  const history = await admin(
-    `price_observations?tracked_flight_id=eq.${flight.id}&select=price&order=observed_at.desc&limit=400`
+    { insert: true, sendEmail, sandbox }
   );
-  const prices = (history || []).map((row) => Number(row.price)).filter(Number.isFinite);
-
-  const stats = {
-    last_price: price,
-    lowest_price: round(Math.min(...prices)),
-    highest_price: round(Math.max(...prices)),
-    median_price: round(median(prices)),
-    last_airline: cheapest.airline,
-    last_booking_url: cheapest.booking_url,
-    last_checked_at: new Date().toISOString(),
-  };
-
-  const alert = classify({
-    price,
-    target: flight.target_price,
-    previousLow: flight.lowest_price,
-    previousPrice: flight.last_price,
-    samples: prices.length,
-  });
-
-  await admin(`tracked_flights?id=eq.${flight.id}`, { method: "PATCH", body: stats });
-
-  if (!alert) {
-    return { flight_id: flight.id, status: "checked", price, currency, stats };
-  }
-  if (await recentlyAlerted(flight.id, alert.kind)) {
-    return { flight_id: flight.id, status: "alert_suppressed", price, currency, kind: alert.kind };
-  }
-
-  let emailedAt = null;
-  if (sendEmail && flight.email && flight.email_alerts !== false) {
-    emailedAt = await sendAlertEmail({
-      to: flight.email,
-      name: flight.display_name,
-      flight,
-      price,
-      currency,
-      previousPrice: flight.last_price,
-      stats,
-      kind: alert.kind,
-      message: alert.message,
-      bookingUrl: cheapest.booking_url,
-      airline: cheapest.airline,
-      sandbox,
-    });
-  }
-
-  await admin("alerts", {
-    method: "POST",
-    body: {
-      tracked_flight_id: flight.id,
-      user_id: flight.user_id,
-      kind: alert.kind,
-      price,
-      previous_price: flight.last_price,
-      currency,
-      message: alert.message,
-      booking_url: cheapest.booking_url,
-      emailed_at: emailedAt,
-    },
-    prefer: "return=minimal",
-  });
-
-  return {
-    flight_id: flight.id,
-    status: "alerted",
-    kind: alert.kind,
-    price,
-    currency,
-    emailed: Boolean(emailedAt),
-    stats,
-  };
 }
 
-module.exports = { checkTrackedFlight, classify, median, MIN_CHECK_SECONDS };
+/**
+ * Evaluate the newest stored observation for a flight without querying any
+ * provider — used after the Google Flights collector writes its results.
+ */
+async function evaluateStoredPrice(flight, { sendEmail = true } = {}) {
+  const rows = await admin(
+    `price_observations?tracked_flight_id=eq.${flight.id}` +
+      "&select=price,currency,airline,booking_url,source&order=observed_at.desc&limit=1"
+  );
+  const latest = (rows || [])[0];
+  if (!latest) return { flight_id: flight.id, status: "no_observations" };
+
+  return applyPrice(
+    flight,
+    {
+      price: latest.price,
+      currency: latest.currency,
+      airline: latest.airline,
+      booking_url: latest.booking_url,
+      source: latest.source,
+    },
+    { insert: false, sendEmail, sandbox: String(latest.source || "").endsWith("_test") }
+  );
+}
+
+module.exports = {
+  applyPrice,
+  checkTrackedFlight,
+  evaluateStoredPrice,
+  classify,
+  median,
+  MIN_CHECK_SECONDS,
+};

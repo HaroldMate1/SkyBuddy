@@ -128,7 +128,6 @@ async function applySession(next) {
   profile = await loadProfile();
   renderAccount();
 
-  if (!UI.cardDecorators.length) UI.cardDecorators.push(decorateCard);
   UI.hooks.search = liveSearch;
   UI.hooks.track = trackFlight;
   UI.hooks.renderTracked = renderTracked;
@@ -447,7 +446,13 @@ async function renderTracked() {
 
 /* ---------------- trip tools ---------------- */
 
-/** Add the seat and booking buttons to a rendered fare card. */
+/**
+ * Add the seat and booking buttons to a rendered fare card.
+ *
+ * The seat advisory is plain client-side logic — no account needed — so it is
+ * offered to everyone. Booking needs somewhere to store the intent, so it only
+ * appears once someone is signed in.
+ */
 function decorateCard(card, flight) {
   const actions = document.createElement("span");
   actions.className = "flight__tools";
@@ -459,15 +464,21 @@ function decorateCard(card, flight) {
   seats.addEventListener("click", () => showSeatSheet(flight));
   actions.appendChild(seats);
 
-  const book = document.createElement("button");
-  book.type = "button";
-  book.className = "btn btn--sm btn--ghost";
-  book.textContent = "Book";
-  book.addEventListener("click", () => prepareBooking(flight));
-  actions.appendChild(book);
+  if (session) {
+    const book = document.createElement("button");
+    book.type = "button";
+    book.className = "btn btn--sm btn--ghost";
+    book.textContent = "Book";
+    book.addEventListener("click", () => prepareBooking(flight));
+    actions.appendChild(book);
+  }
 
   card.querySelector(".flight__price").appendChild(actions);
 }
+
+UI.cardDecorators.push(decorateCard);
+// re-render whatever is on screen so the buttons appear on first load too
+if (UI.elements.results.querySelector(".flight")) UI.runSearch();
 
 /* ---------------- booking intents ---------------- */
 

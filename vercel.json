@@ -27,8 +27,14 @@
       ]
     },
     {
-      "source": "/(.*).(css|js|jpg|png|svg|webp)",
-      "headers": [{ "key": "Cache-Control", "value": "public, max-age=3600, s-maxage=86400" }]
+      "source": "/(.*).(css|js)",
+      "headers": [
+        { "key": "Cache-Control", "value": "public, max-age=0, must-revalidate, s-maxage=86400" }
+      ]
+    },
+    {
+      "source": "/(.*).(jpg|png|svg|webp|ico)",
+      "headers": [{ "key": "Cache-Control", "value": "public, max-age=86400, s-maxage=604800" }]
     },
     {
       "source": "/data/(.*).json",

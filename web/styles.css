@@ -1347,3 +1347,91 @@ footer { border-top: 1px solid rgba(169, 184, 212, 0.12); padding: 34px 0 52px; 
   border-radius: 999px;
   padding: 4px 12px;
 }
+
+/* =====================================================================
+   Small-screen refinements — desktop above 1024px is untouched.
+   ===================================================================== */
+
+/* anchors must clear the sticky header */
+section[id] { scroll-margin-top: 76px; }
+
+@media (max-width: 1024px) {
+  /* Two columns beat four stacked rows: fare details on the left, the money
+     and the actions on the right, so a card is scannable in one glance. */
+  .flight {
+    grid-template-columns: minmax(0, 1fr) 190px;
+    column-gap: 20px;
+    row-gap: 12px;
+    align-items: start;
+  }
+  .flight__airline { grid-column: 1; grid-row: 1; }
+  .flight__route   { grid-column: 1; grid-row: 2; padding-left: 0; }
+  .flight__trend   { grid-column: 1; grid-row: 3; }
+  .flight__price {
+    grid-column: 2;
+    grid-row: 1 / span 3;
+    align-items: stretch;
+    text-align: right;
+    gap: 8px;
+  }
+  .flight__price .price { text-align: right; }
+  .flight__price .price__verdict { align-self: flex-end; }
+  .flight__price .btn { width: 100%; }
+  .flight__tools { flex-direction: column; gap: 8px; margin-top: 0; }
+  .flight__tools .btn { width: 100%; }
+  .flight__trend .spark { max-width: none; }
+
+  /* keep the sky out from behind the words */
+  .cloud { opacity: 0.28 !important; transform: scale(0.55); }
+}
+
+@media (max-width: 680px) {
+  /* One column, but pair things that belong together instead of stacking
+     six full-width blocks. */
+  .flight { grid-template-columns: 1fr; row-gap: 10px; }
+  .flight__price {
+    grid-column: 1;
+    grid-row: auto;
+    display: grid;
+    grid-template-columns: auto auto;
+    justify-content: space-between;
+    align-items: center;
+    text-align: left;
+    gap: 8px 12px;
+  }
+  .flight__price .price { grid-column: 1; grid-row: 1; text-align: left; }
+  .flight__price .price__verdict { grid-column: 2; grid-row: 1; align-self: center; }
+  .flight__price > .btn { grid-column: 1 / -1; grid-row: 2; }
+  .flight__tools {
+    grid-column: 1 / -1;
+    grid-row: 3;
+    flex-direction: row;
+    gap: 8px;
+    margin-top: 0;
+  }
+  .flight__tools .btn { flex: 1; }
+
+  /* hero: get the product above the fold sooner */
+  .hero { padding: 28px 0 22px; }
+  .hero h1 { font-size: clamp(27px, 7.6vw, 34px); margin-bottom: 12px; }
+  .hero .lede { font-size: 15px; margin-bottom: 18px; }
+  .hero-cta { gap: 8px; margin: 0 0 14px; }
+  .hero-cta .btn { flex: 1 1 calc(50% - 4px); min-width: 0; padding: 12px 14px; font-size: 13.5px; }
+  .pill { font-size: 10.5px; padding: 4px 9px; }
+
+  /* barely-there sky so the headline stays legible */
+  .cloud { opacity: 0.22 !important; transform: scale(0.42); }
+  .plane { opacity: 0.55; }
+
+  .section-head { margin-bottom: 26px; }
+  .stat b { font-size: 23px; }
+}
+
+/* 390px still has room for the price and its verdict on one line — only
+   restack on the genuinely narrow phones. */
+@media (max-width: 340px) {
+  .flight__price { grid-template-columns: 1fr; justify-content: start; }
+  .flight__price .price__verdict { grid-column: 1; grid-row: 2; justify-self: start; }
+  .flight__price > .btn { grid-row: 3; }
+  .flight__tools { grid-row: 4; }
+}

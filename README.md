@@ -27,6 +27,7 @@
   <a href="https://github.com/HaroldMate1/SkyBuddy/actions/workflows/tests.yml"><img src="https://github.com/HaroldMate1/SkyBuddy/actions/workflows/tests.yml/badge.svg" alt="Tests"></a>
   <img src="https://img.shields.io/badge/python-3.10%2B-1668c8" alt="Python 3.10+">
   <img src="https://img.shields.io/badge/protocol-MCP-ff007f" alt="MCP">
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-9b6bff" alt="MIT License"></a>
 </p>
 
 <p align="center">
@@ -771,6 +772,7 @@ vercel --prod
 | `api/cron/check-prices.js` | The nightly sweep that raises and emails alerts |
 | `api/evaluate.js` | Applies the alert rules to prices the collector stored |
 | `api/collect.js` | Triggers the Google Flights collector on demand |
+| `api/admin/purge-test-data.js` | Clears sandbox prices and their alerts, nothing else |
 | `scripts/web_price_collector.py` | Prices tracked routes with Google Flights (GitHub Actions) |
 | `web/features.js` | Seat advisory, booking playbook and points logic in the browser |
 | `server/` | Shared Duffel, Supabase REST, alert-rule and email helpers |
@@ -876,7 +878,7 @@ verdicts, auto-trigger) and traveller workspaces (isolation, switching, deletion
 Contributions are welcome — see [CONTRIBUTING.md](CONTRIBUTING.md).
 Issues and ideas: [GitHub Issues](https://github.com/HaroldMate1/SkyBuddy/issues).
 
-Open source, free to use for personal travel planning.
+Released under the [MIT License](LICENSE).
 Built by [Harold Mateo](https://github.com/HaroldMate1).
 
 ---

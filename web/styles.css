@@ -39,6 +39,10 @@
 }
 
 * { box-sizing: border-box; }
+
+/* An author `display` rule beats the UA stylesheet's [hidden], so hiding a
+   flex container with .hidden = true silently does nothing without this. */
+[hidden] { display: none !important; }
 html { scroll-behavior: smooth; }
 
 body {

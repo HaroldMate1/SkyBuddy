@@ -162,7 +162,7 @@ function renderAccount() {
     ${features.liveSearch ? "" : '<span class="account__warn">Live search is not configured (DUFFEL_API_KEY)</span>'}
     ${
       features.sandbox
-        ? '<span class="account__warn" title="Duffel test tokens invent new inventory on every request, so prices change between identical searches.">Duffel test mode — prices are randomised sandbox data</span>'
+        ? '<span class="account__warn" title="Live search runs through a Duffel test token, which invents inventory on every request. Tracked routes are priced from Google Flights by the collector, and those are real.">Search results are Duffel sandbox data — tracked prices are real</span>'
         : ""
     }
     <span class="account__tools">

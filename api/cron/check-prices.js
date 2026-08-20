@@ -43,16 +43,18 @@ module.exports = async (req, res) => {
     );
     const byUser = Object.fromEntries((profiles || []).map((profile) => [profile.id, profile]));
 
-    // A Duffel test token invents prices, so the sweep must not store them as
-    // history. When the key is a sandbox one we only re-evaluate what the
-    // Google Flights collector already wrote.
+    // One source owns the price history, so the low/median/high keep meaning
+    // something. It defaults to the Google Flights collector — set
+    // PRICE_SOURCE=duffel to have this sweep fetch and store prices instead.
+    // A Duffel test token can never be the source: its prices are invented.
     const sandbox = isSandbox();
+    const useDuffel = !sandbox && (process.env.PRICE_SOURCE || "google_flights") === "duffel";
 
     const results = [];
     for (const flight of flights) {
       const profile = byUser[flight.user_id] || {};
       try {
-        if (sandbox) {
+        if (!useDuffel) {
           results.push(
             await evaluateStoredPrice({
               ...flight,
@@ -82,7 +84,7 @@ module.exports = async (req, res) => {
 
     return res.status(200).json({
       checked: results.length,
-      mode: sandbox ? "evaluate_stored" : "duffel",
+      mode: useDuffel ? "duffel" : "evaluate_stored",
       alerts: results.filter((result) => result.status === "alerted").length,
       errors: results.filter((result) => result.status === "error").length,
       duration_ms: Date.now() - started,

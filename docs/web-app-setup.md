@@ -57,8 +57,21 @@ all under row-level security, which the dashboard's **Book**, **Wallet** and
 1. Sign up at [duffel.com](https://duffel.com) and open **Developers → Access tokens**.
 2. Create a **test** token to start (`duffel_test_...`) → `DUFFEL_API_KEY`.
 3. Test mode returns Duffel's sandbox inventory, which is perfect for checking
-   the whole loop. Switch the token to a live one (`duffel_live_...`) once they
-   approve your account, and nothing else changes.
+   the whole loop — but the prices are invented, so identical searches come
+   back different. The site labels that.
+
+### When your live token arrives
+
+Replace `DUFFEL_API_KEY` in Vercel with the `duffel_live_...` token and
+redeploy. Nothing else changes:
+
+* the search box switches to Duffel automatically, because the site prefers a
+  live token and only falls back to Google Flights without one;
+* the sandbox warning disappears on its own;
+* the price history stays with the Google Flights collector, so the
+  low/median/high keep comparing like with like. To hand the history to Duffel
+  instead, set `PRICE_SOURCE=duffel` and the nightly sweep will fetch and store
+  its prices — leave it unset to keep the collector as the source.
 
 ## 3 · Resend
 

@@ -160,7 +160,11 @@ function renderAccount() {
       Email me price alerts
     </label>
     ${features.liveSearch ? "" : '<span class="account__warn">Live search is not configured (DUFFEL_API_KEY)</span>'}
-    <span class="account__note">Prices from Google Flights</span>
+    <span class="account__note">${
+      features.liveSearch && !features.sandbox
+        ? "Search: Duffel · tracking: Google Flights"
+        : "Prices from Google Flights"
+    }</span>
     <span class="account__tools">
       <button class="btn btn--sm btn--ghost" id="tool-wallet" type="button">Wallet</button>
       <button class="btn btn--sm btn--ghost" id="tool-passengers" type="button">Travellers</button>
@@ -215,41 +219,50 @@ async function authedFetch(url, body) {
 }
 
 async function liveSearch(query) {
-  // Google Flights first: those are the prices the collector records, so a
-  // search result and a tracked route finally mean the same thing. Duffel is
-  // only used if it holds a live token — never its invented test inventory.
-  let payload;
-  try {
-    payload = await authedFetch("/api/search-flights", {
-      origin: query.origin,
-      destination: query.destination,
-      outbound_date: query.outbound_date,
-      return_date: query.return_date,
-      passengers: 1,
-      cabin: "economy",
-      currency: profile.currency || "EUR",
-    });
-  } catch (error) {
-    if (features.liveSearch && !features.sandbox) {
-      payload = await authedFetch("/api/search", {
-        origin: query.origin,
-        destination: query.destination,
-        outbound_date: query.outbound_date,
-        return_date: query.return_date,
-        passengers: 1,
-        cabin: "economy",
-      });
-    } else {
-      throw new Error(`${error.message} — no other real price source is configured.`);
+  const request = {
+    origin: query.origin,
+    destination: query.destination,
+    outbound_date: query.outbound_date,
+    return_date: query.return_date,
+    passengers: 1,
+    cabin: "economy",
+  };
+
+  // A live Duffel token answers instantly with bookable inventory, so it wins
+  // when there is one. Google Flights is the fallback — it has the better
+  // coverage but refuses datacentre callers, which is handled below.
+  const duffelIsReal = features.liveSearch && !features.sandbox;
+  const providers = duffelIsReal
+    ? [["/api/search", request], ["/api/search-flights", { ...request, currency: profile.currency || "EUR" }]]
+    : [["/api/search-flights", { ...request, currency: profile.currency || "EUR" }]];
+
+  let payload = null;
+  let lastError = null;
+
+  for (const [endpoint, body] of providers) {
+    try {
+      const attempt = await authedFetch(endpoint, body);
+      if (attempt.offers && attempt.offers.length) {
+        payload = attempt;
+        break;
+      }
+      payload = payload || attempt;
+    } catch (error) {
+      lastError = error;
     }
+  }
+
+  if (!payload) {
+    throw new Error(
+      lastError ? lastError.message : "No price source answered. Check the configuration."
+    );
   }
 
   // Google answers this endpoint with nothing when it is called from a
   // datacentre IP — the same query returns fares from a laptop or from the
-  // GitHub Actions runner. Rather than show invented Duffel prices, say so and
-  // offer the path that does work: track the route and let the collector price
-  // it from a runner Google will talk to.
-  if (!payload.offers.length && payload.source === "google_flights") {
+  // GitHub Actions runner. Rather than show nothing, offer the path that does
+  // work: track the route and let the collector price it.
+  if (!payload.offers.length) {
     offerTracking(query);
     return [];
   }

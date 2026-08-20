@@ -244,6 +244,16 @@ async function liveSearch(query) {
     }
   }
 
+  // Google answers this endpoint with nothing when it is called from a
+  // datacentre IP — the same query returns fares from a laptop or from the
+  // GitHub Actions runner. Rather than show invented Duffel prices, say so and
+  // offer the path that does work: track the route and let the collector price
+  // it from a runner Google will talk to.
+  if (!payload.offers.length && payload.source === "google_flights") {
+    offerTracking(query);
+    return [];
+  }
+
   // If this route is already tracked, show its recorded history on the cards.
   const { data: tracked } = await supabase
     .from("tracked_flights")
@@ -788,4 +798,69 @@ async function showPassengers() {
     if (error) return UI.showMessage(error.message, "error");
     showPassengers();
   });
+}
+
+
+/** Explain the datacentre block and offer the route that does work. */
+function offerTracking(query) {
+  const results = UI.elements.results;
+  results.innerHTML = "";
+
+  const box = document.createElement("div");
+  box.className = "results__msg glass";
+  box.innerHTML = `
+    <strong>Google Flights will not answer an instant search from the server.</strong>
+    <p>It serves nothing to datacentre addresses, so the site cannot price
+       ${UI.escapeHtml(query.origin)} → ${UI.escapeHtml(query.destination)} on the spot.
+       The collector runs from a GitHub runner that Google does answer — track the
+       route and it is priced on the next run, then checked three times a day.</p>
+  `;
+
+  const track = document.createElement("button");
+  track.type = "button";
+  track.className = "btn btn--primary btn--sm";
+  track.textContent = "Track this route";
+  track.addEventListener("click", async () => {
+    track.disabled = true;
+    track.textContent = "Saving…";
+    await trackRoute(query);
+  });
+  box.appendChild(track);
+  results.appendChild(box);
+}
+
+/** Track a route without a fare card to start from. */
+async function trackRoute(query) {
+  const targetRaw = window.prompt(
+    `Alert me when ${query.origin} → ${query.destination} drops to (leave empty for "any new low"):`,
+    ""
+  );
+  if (targetRaw === null) return renderTracked();
+  const target = targetRaw.trim() ? Number(targetRaw.replace(/[^\d.]/g, "")) : null;
+
+  const { error } = await supabase.from("tracked_flights").insert({
+    user_id: session.user.id,
+    origin: query.origin,
+    destination: query.destination,
+    outbound_date: query.outbound_date,
+    return_date: query.return_date,
+    currency: profile.currency || "EUR",
+    target_price: Number.isFinite(target) ? target : null,
+    label: `${query.origin} → ${query.destination}`,
+  });
+
+  if (error) return UI.showMessage(error.message, "error");
+
+  await renderTracked();
+
+  if (features.collector) {
+    try {
+      const result = await authedFetch("/api/collect", {});
+      UI.showMessage(result.message);
+    } catch (collectError) {
+      UI.showMessage(`Tracked. ${collectError.message}`);
+    }
+  } else {
+    UI.showMessage("Tracked — the next collector run prices it (06:10, 12:10 and 18:10 UTC).");
+  }
 }

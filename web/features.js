@@ -144,7 +144,13 @@ export function seatAdvisory(flight) {
 let modalRoot = null;
 
 function ensureModal() {
-  if (modalRoot) return modalRoot;
+  // Re-attach rather than trusting the cached node: if it was ever removed
+  // from the document, rendering into it would silently show nothing.
+  if (modalRoot && modalRoot.isConnected) return modalRoot;
+  if (modalRoot) {
+    document.body.appendChild(modalRoot);
+    return modalRoot;
+  }
   modalRoot = document.createElement("div");
   modalRoot.className = "sheet";
   modalRoot.hidden = true;

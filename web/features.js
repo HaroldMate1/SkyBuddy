@@ -14,19 +14,34 @@ const LONG_HAUL_MINUTES = 480;
 const clean = (value) => String(value || "").replace(/\s+/g, " ").trim();
 const slug = (value) => clean(value).toUpperCase().replace(/[^A-Z0-9]/g, "");
 
+/** "IB 434, AV 11" → ["IB434", "AV11"] — one real flight per entry. */
+export function flightCodes(flightNumber) {
+  return String(flightNumber || "")
+    .split(/[,;]+/)
+    .map((part) => slug(part))
+    .filter(Boolean);
+}
+
 export function seatSources({ airline, aircraft, flightNumber, cabin }) {
   const query = (...parts) => parts.filter(Boolean).join(" ");
-  const code = slug(flightNumber);
+  // The collector puts the long-haul sector first, and that is the flight whose
+  // cabin actually matters. Every leg still gets its own link.
+  const codes = flightCodes(flightNumber);
+  const [primaryCode, ...otherCodes] = codes;
 
   return {
     primary: [
       {
         name: "FlightAware",
-        role: "verify the aircraft",
-        url: code
-          ? `https://www.flightaware.com/live/flight/${code}`
+        role: primaryCode ? `check ${primaryCode}` : "verify the aircraft",
+        url: primaryCode
+          ? `https://www.flightaware.com/live/flight/${primaryCode}`
           : `https://www.flightaware.com/live/findflight?query=${encodeURIComponent(clean(airline))}`,
         why: "Confirm the exact operating flight and aircraft type before trusting any seat map.",
+        alternatives: otherCodes.map((code) => ({
+          label: code,
+          url: `https://www.flightaware.com/live/flight/${code}`,
+        })),
       },
       {
         name: "SeatMaps",
@@ -56,8 +71,8 @@ export function seatSources({ airline, aircraft, flightNumber, cabin }) {
       },
       {
         name: "Flightradar24",
-        url: code
-          ? `https://www.flightradar24.com/data/flights/${code.toLowerCase()}`
+        url: primaryCode
+          ? `https://www.flightradar24.com/data/flights/${primaryCode.toLowerCase()}`
           : "https://www.flightradar24.com/data/flights",
         search: flightNumber || airline,
         why: "Second source for the aircraft actually flying the route lately.",
@@ -177,6 +192,13 @@ export function showSeatSheet(flight) {
           <strong><a href="${esc(source.url)}" target="_blank" rel="noopener">${esc(source.name)}</a>
             <em>${esc(source.role)}</em></strong>
           <span>${esc(source.why)}</span>
+          ${
+            (source.alternatives || []).length
+              ? `<span class="muted">Other legs: ${source.alternatives
+                  .map((leg) => `<a href="${esc(leg.url)}" target="_blank" rel="noopener">${esc(leg.label)}</a>`)
+                  .join(" · ")}</span>`
+              : ""
+          }
         </div>
       </li>`
     )

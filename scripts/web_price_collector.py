@@ -157,7 +157,12 @@ def summarise(itinerary: dict[str, Any]) -> dict[str, Any]:
     carriers: list[str] = []
     numbers: list[str] = []
 
-    for leg in legs:
+    # The aircraft that matters for a seat map is the one flying the longest
+    # sector, not the regional hop that feeds it — so lead with that leg.
+    longest = max(legs, key=lambda leg: leg.get("duration") or 0, default={})
+    ordered = sorted(legs, key=lambda leg: leg is not longest)
+
+    for leg in ordered:
         airline = (leg.get("airline") or {}).get("name")
         if airline and airline not in carriers:
             carriers.append(airline)
@@ -165,10 +170,6 @@ def summarise(itinerary: dict[str, Any]) -> dict[str, Any]:
         number = leg.get("flight_number") or ""
         if number:
             numbers.append(f"{code} {number}".strip())
-
-    # The aircraft that matters for a seat map is the one flying the longest
-    # sector, not the regional hop that feeds it.
-    longest = max(legs, key=lambda leg: leg.get("duration") or 0, default={})
 
     return {
         "price": float(itinerary.get("price") or 0),

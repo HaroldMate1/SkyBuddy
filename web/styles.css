@@ -1339,3 +1339,11 @@ footer { border-top: 1px solid rgba(169, 184, 212, 0.12); padding: 34px 0 52px; 
   .account__tools { width: 100%; }
   .account__tools .btn { flex: 1 1 40%; }
 }
+
+.account__note {
+  font-size: 12px;
+  color: var(--ice-dim);
+  border: 1px solid rgba(169, 184, 212, 0.22);
+  border-radius: 999px;
+  padding: 4px 12px;
+}

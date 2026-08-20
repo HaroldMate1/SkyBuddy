@@ -15,6 +15,7 @@
   "functions": {
     "api/cron/check-prices.js": { "maxDuration": 300 },
     "api/search.js": { "maxDuration": 30 },
+    "api/search-flights.py": { "maxDuration": 60 },
     "api/check.js": { "maxDuration": 60 }
   },
   "headers": [

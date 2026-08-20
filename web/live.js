@@ -160,11 +160,7 @@ function renderAccount() {
       Email me price alerts
     </label>
     ${features.liveSearch ? "" : '<span class="account__warn">Live search is not configured (DUFFEL_API_KEY)</span>'}
-    ${
-      features.sandbox
-        ? '<span class="account__warn" title="Live search runs through a Duffel test token, which invents inventory on every request. Tracked routes are priced from Google Flights by the collector, and those are real.">Search results are Duffel sandbox data — tracked prices are real</span>'
-        : ""
-    }
+    <span class="account__note">Prices from Google Flights</span>
     <span class="account__tools">
       <button class="btn btn--sm btn--ghost" id="tool-wallet" type="button">Wallet</button>
       <button class="btn btn--sm btn--ghost" id="tool-passengers" type="button">Travellers</button>
@@ -219,24 +215,33 @@ async function authedFetch(url, body) {
 }
 
 async function liveSearch(query) {
-  if (!features.liveSearch) {
-    throw new Error("Live search is not configured yet — add DUFFEL_API_KEY in Vercel.");
-  }
-
-  const payload = await authedFetch("/api/search", {
-    origin: query.origin,
-    destination: query.destination,
-    outbound_date: query.outbound_date,
-    return_date: query.return_date,
-    passengers: 1,
-    cabin: "economy",
-  });
-
-  // While live search runs on a Duffel test token its prices are invented, so
-  // comparing them against the real collected history would produce a verdict
-  // that means nothing — better to show no verdict than a false one.
-  if (features.sandbox) {
-    return payload.offers.map((offer) => toCard(offer, query, null));
+  // Google Flights first: those are the prices the collector records, so a
+  // search result and a tracked route finally mean the same thing. Duffel is
+  // only used if it holds a live token — never its invented test inventory.
+  let payload;
+  try {
+    payload = await authedFetch("/api/search-flights", {
+      origin: query.origin,
+      destination: query.destination,
+      outbound_date: query.outbound_date,
+      return_date: query.return_date,
+      passengers: 1,
+      cabin: "economy",
+      currency: profile.currency || "EUR",
+    });
+  } catch (error) {
+    if (features.liveSearch && !features.sandbox) {
+      payload = await authedFetch("/api/search", {
+        origin: query.origin,
+        destination: query.destination,
+        outbound_date: query.outbound_date,
+        return_date: query.return_date,
+        passengers: 1,
+        cabin: "economy",
+      });
+    } else {
+      throw new Error(`${error.message} — no other real price source is configured.`);
+    }
   }
 
   // If this route is already tracked, show its recorded history on the cards.

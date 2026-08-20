@@ -232,6 +232,13 @@ async function liveSearch(query) {
     cabin: "economy",
   });
 
+  // While live search runs on a Duffel test token its prices are invented, so
+  // comparing them against the real collected history would produce a verdict
+  // that means nothing — better to show no verdict than a false one.
+  if (features.sandbox) {
+    return payload.offers.map((offer) => toCard(offer, query, null));
+  }
+
   // If this route is already tracked, show its recorded history on the cards.
   const { data: tracked } = await supabase
     .from("tracked_flights")
@@ -244,11 +251,20 @@ async function liveSearch(query) {
   let history = null;
   if (tracked) history = await loadHistory(tracked.id);
 
-  return payload.offers.map((offer) => ({
+  return payload.offers.map((offer) =>
+    toCard(offer, query, history && history.prices.length > 1 ? history.prices : null)
+  );
+}
+
+/** Shape one offer the way the card renderer expects. */
+function toCard(offer, query, history) {
+  return {
     id: offer.offer_id,
     airline: offer.airline,
     airline_code: offer.airline_code,
     flight_number: offer.flight_number,
+    aircraft: offer.aircraft,
+    duration_minutes: offer.duration_minutes,
     origin: offer.origin,
     destination: offer.destination,
     outbound: query.outbound_date,
@@ -260,8 +276,8 @@ async function liveSearch(query) {
     duration: UI.minutesToText(offer.duration_minutes),
     stops: offer.stops,
     booking_url: offer.booking_url,
-    history: history && history.prices.length > 1 ? history.prices : null,
-  }));
+    history,
+  };
 }
 
 async function loadHistory(flightId) {

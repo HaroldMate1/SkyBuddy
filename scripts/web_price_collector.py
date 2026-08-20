@@ -74,16 +74,27 @@ class Supabase:
         path = f"{self.url}/rest/v1/tracked_flights?{query}&select=*&limit={limit}"
         return api_request(path, headers=self.headers) or []
 
+    #: Columns added by supabase/schema-3-observation-details.sql.
+    DETAIL_COLUMNS = ("aircraft", "flight_numbers", "duration_minutes", "stops")
+
     def insert_observation(self, row: dict[str, Any]) -> None:
-        """Store one observed price."""
+        """Store one observed price.
+
+        The itinerary detail lives in columns added by the third migration; if
+        that has not been run yet, store the price without them rather than
+        losing the observation.
+        """
         headers = dict(self.headers)
         headers["Prefer"] = "return=minimal"
-        api_request(
-            f"{self.url}/rest/v1/price_observations",
-            method="POST",
-            headers=headers,
-            payload=row,
-        )
+        url = f"{self.url}/rest/v1/price_observations"
+        try:
+            api_request(url, method="POST", headers=headers, payload=row)
+        except RuntimeError as error:
+            if not any(column in str(error) for column in self.DETAIL_COLUMNS):
+                raise
+            print("  (detail columns missing — run schema-3-observation-details.sql)", file=sys.stderr)
+            core = {key: value for key, value in row.items() if key not in self.DETAIL_COLUMNS}
+            api_request(url, method="POST", headers=headers, payload=core)
 
 
 def google_flights_url(origin: str, destination: str, outbound: str, return_date: Optional[str]) -> str:
@@ -123,10 +134,28 @@ def run_fli(flight: dict[str, Any], currency: str, fli_bin: str) -> list[dict[st
     return payload.get("flights") or []
 
 
+def itinerary_legs(itinerary: dict[str, Any]) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+    """Return every leg plus the outbound direction.
+
+    One-way results carry ``legs`` directly; round trips nest them under
+    ``outbound`` and ``return``, and their top-level ``duration`` is both
+    directions added together — useless for deciding whether a flight is
+    long-haul.
+    """
+    if itinerary.get("legs"):
+        return list(itinerary["legs"]), itinerary
+
+    outbound = itinerary.get("outbound") or {}
+    inbound = itinerary.get("return") or {}
+    legs = list(outbound.get("legs") or []) + list(inbound.get("legs") or [])
+    return legs, (outbound or itinerary)
+
+
 def summarise(itinerary: dict[str, Any]) -> dict[str, Any]:
     """Reduce one Google Flights itinerary to what SkyBuddy stores and shows."""
-    legs = itinerary.get("legs") or []
-    carriers, numbers, aircraft = [], [], []
+    legs, outbound = itinerary_legs(itinerary)
+    carriers: list[str] = []
+    numbers: list[str] = []
 
     for leg in legs:
         airline = (leg.get("airline") or {}).get("name")
@@ -136,9 +165,9 @@ def summarise(itinerary: dict[str, Any]) -> dict[str, Any]:
         number = leg.get("flight_number") or ""
         if number:
             numbers.append(f"{code} {number}".strip())
-        if leg.get("aircraft"):
-            aircraft.append(leg["aircraft"])
 
+    # The aircraft that matters for a seat map is the one flying the longest
+    # sector, not the regional hop that feeds it.
     longest = max(legs, key=lambda leg: leg.get("duration") or 0, default={})
 
     return {
@@ -146,9 +175,10 @@ def summarise(itinerary: dict[str, Any]) -> dict[str, Any]:
         "currency": itinerary.get("currency") or "EUR",
         "airline": " + ".join(carriers) or "Unknown",
         "flight_numbers": ", ".join(numbers),
-        "aircraft": (longest.get("aircraft") or (aircraft[0] if aircraft else "")),
-        "duration_minutes": int(itinerary.get("duration") or 0),
-        "stops": int(itinerary.get("stops") or 0),
+        "aircraft": longest.get("aircraft") or "",
+        # per-direction, so the long-haul seat check is not fooled by a round trip
+        "duration_minutes": int(outbound.get("duration") or itinerary.get("duration") or 0),
+        "stops": int(outbound.get("stops") if outbound.get("stops") is not None else itinerary.get("stops") or 0),
     }
 
 
@@ -214,6 +244,10 @@ def collect(args: argparse.Namespace) -> int:
                     flight.get("return_date"),
                 ),
                 "source": "google_flights",
+                "aircraft": best["aircraft"] or None,
+                "flight_numbers": best["flight_numbers"] or None,
+                "duration_minutes": best["duration_minutes"] or None,
+                "stops": best["stops"],
             }
         )
         stored += 1

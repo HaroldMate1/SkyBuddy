@@ -379,6 +379,31 @@ async function renderTracked() {
       row.appendChild(chart);
     }
 
+    // The newest observation carries the aircraft and flight numbers, which is
+    // what the seat advisory needs.
+    const { data: detail } = await supabase
+      .from("price_observations")
+      .select("airline,aircraft,flight_numbers,duration_minutes")
+      .eq("tracked_flight_id", flight.id)
+      .order("observed_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    const seats = document.createElement("button");
+    seats.type = "button";
+    seats.className = "btn btn--sm btn--ghost";
+    seats.textContent = "Seats";
+    seats.addEventListener("click", () =>
+      showSeatSheet({
+        airline: (detail && detail.airline) || flight.last_airline,
+        aircraft: detail && detail.aircraft,
+        flight_numbers: detail && detail.flight_numbers,
+        duration_minutes: (detail && detail.duration_minutes) || 0,
+        cabin: flight.cabin,
+      })
+    );
+    row.appendChild(seats);
+
     const check = document.createElement("button");
     check.type = "button";
     check.className = "btn btn--sm btn--ghost";
